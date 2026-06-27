@@ -4,10 +4,11 @@ import {
   getInventoryByRoll, getProductions,
   addProduction, updateProduction, deleteProduction
 } from '../../api';
+// YAHAN LAYERS ADD KAR DIYA HAI
 import {
   Factory, Search, Plus, Trash2, Pencil, Check, X, 
   AlertTriangle, Info, Database, History, ArrowRight,
-  TrendingDown, CheckCircle2, Calculator, Calendar
+  TrendingDown, CheckCircle2, Calculator, Calendar, Layers 
 } from 'lucide-react';
 
 const CORE_BRANDS = ['Bell', 'Race', 'Tesco', 'Jhonson'];
@@ -25,7 +26,6 @@ const emptyForm = {
 };
 
 const Production = () => {
-  // Logic (Keep as is)
   const { inventory, adjustStock, refreshInventory } = useContext(StockContext);
   const [form, setForm] = useState(emptyForm);
   const [productions, setProductions] = useState([]);
@@ -123,21 +123,6 @@ const Production = () => {
     } catch (err) { flash('❌ Delete error: ' + err.message, false); await refreshInventory(); }
   };
 
-  const saveEdit = async (id) => {
-    const old = productions.find(x => x._id === id);
-    const newQty = parseFloat(editData.core_qty_used) || 0;
-    const newYpC = parseFloat(editData.yards_per_core) || 0;
-    const newYds = parseFloat((newQty * newYpC).toFixed(2));
-    try {
-      if (old?.roll_snapshot) { await adjustStock(old.roll_snapshot, 'yards', Number(old.yards_used || 0)); await adjustStock(old.roll_snapshot, 'yards', -newYds); }
-      if (old?.core_snapshot) { await adjustStock(old.core_snapshot, 'qty', Number(old.core_qty_used || 0)); await adjustStock(old.core_snapshot, 'qty', -newQty); }
-      const updated = await updateProduction(id, { ...editData, yards_used: newYds });
-      setProductions(prev => prev.map(x => x._id === id ? updated : x));
-      setEditId(null); flash('✅ Updated!');
-    } catch (err) { flash('❌ Update error: ' + err.message, false); await refreshInventory(); }
-  };
-
-  // UI Components
   const InputLabel = ({ children }) => <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-1 block">{children}</label>;
 
   return (
@@ -150,7 +135,7 @@ const Production = () => {
             <Factory className="text-[#10b981]" size={36} />
             PRODUCTION <span className="text-[#10b981] italic text-5xl">HUB</span>
           </h1>
-          <p className="text-slate-500 text-sm font-bold uppercase tracking-widest mt-1">Industrial Slitting & Core Management</p>
+          <p className="text-slate-500 text-sm font-bold uppercase tracking-widest mt-1">Slitting & Core Management</p>
         </div>
         
         <div className="flex p-1.5 bg-white/[0.02] border border-white/10 rounded-[2rem] backdrop-blur-xl">
@@ -219,7 +204,7 @@ const Production = () => {
               )}
             </div>
 
-            {/* STEP 2: CORE SPECS */}
+            {/* STEP 2: CORE DETAILS */}
             <div className="bg-white/[0.02] border border-white/5 p-8 rounded-[2.5rem]">
                <div className="flex items-center gap-3 mb-8">
                   <div className="w-10 h-10 rounded-2xl bg-[#10b981]/10 text-[#10b981] flex items-center justify-center border border-[#10b981]/20"><Plus size={20}/></div>
@@ -229,7 +214,7 @@ const Production = () => {
                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                   <div>
                     <InputLabel>Core Brand</InputLabel>
-                    <select value={form.coreBrand} onChange={e => upd('coreBrand', e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold text-sm appearance-none cursor-pointer">
+                    <select value={form.coreBrand} onChange={e => upd('coreBrand', e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold text-sm cursor-pointer">
                       <option value="">Select Brand</option>
                       {CORE_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
@@ -244,7 +229,7 @@ const Production = () => {
                   </div>
                   <div>
                     <InputLabel>Core Ply</InputLabel>
-                    <select value={form.corePly} onChange={e => upd('corePly', e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold text-sm appearance-none cursor-pointer">
+                    <select value={form.corePly} onChange={e => upd('corePly', e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold text-sm cursor-pointer">
                       <option value="">Select Ply</option>
                       {PLY_OPTIONS.map(p => <option key={p} value={p}>{p} Ply</option>)}
                     </select>
@@ -259,50 +244,31 @@ const Production = () => {
                     {coreItem ? <CheckCircle2 size={20}/> : <X size={20}/>}
                   </div>
                   <div>
-                    <p className="text-xs font-black uppercase tracking-widest">{coreItem ? 'Matching Core Linked' : 'Core Not Found In Database'}</p>
-                    <p className="text-[11px] opacity-70 font-bold">{coreItem ? `${coreItem.qty} pcs available for issuance.` : 'Please add this core in inventory hub first.'}</p>
+                    <p className="text-xs font-black uppercase tracking-widest">{coreItem ? 'Matching Core Linked' : 'Core Not Found'}</p>
+                    <p className="text-[11px] opacity-70 font-bold">{coreItem ? `${coreItem.qty} pcs available.` : 'Please add core in inventory.'}</p>
                   </div>
                 </div>
                )}
             </div>
           </div>
 
-          {/* SUMMARY SIDEBAR */}
+          {/* SUMMARY */}
           <div className="space-y-6">
             <div className={`p-8 rounded-[3rem] border-2 transition-all duration-500 sticky top-8 ${tooMany ? 'bg-red-500/5 border-red-500/20 shadow-[0_0_50px_rgba(239,68,68,0.1)]' : 'bg-emerald-500/5 border-emerald-500/10 shadow-[0_0_50px_rgba(16,185,129,0.05)]'}`}>
               <div className="flex items-center gap-2 mb-8 border-b border-white/5 pb-4">
                 <Calculator className="text-slate-500" size={18} />
                 <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Live Calculation</h3>
               </div>
-              
               <div className="space-y-8">
-                <div>
-                  <p className="text-6xl font-black tracking-tighter text-white leading-none font-mono">{totalYards}</p>
-                  <p className="text-xs font-bold text-slate-500 uppercase mt-3 tracking-widest">Total Yards Needed</p>
-                </div>
-
+                <div><p className="text-6xl font-black tracking-tighter text-white font-mono">{totalYards}</p><p className="text-xs font-bold text-slate-500 uppercase mt-3 tracking-widest">Total Yards Needed</p></div>
                 <div className="space-y-4 pt-6 border-t border-white/5 text-sm">
                    <div className="flex justify-between font-bold text-slate-400"><span>Roll Current</span><span>{availYards} yds</span></div>
                    <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                      <span className="text-xs font-black uppercase text-slate-500">Remaining</span>
-                      <span className={`text-2xl font-black font-mono ${tooMany ? 'text-red-500' : 'text-[#10b981]'}`}>
-                        {(availYards - totalYards).toFixed(2)} yds
-                      </span>
+                      <span className="text-xs font-black text-slate-500">Remaining</span>
+                      <span className={`text-2xl font-black font-mono ${tooMany ? 'text-red-500' : 'text-[#10b981]'}`}>{(availYards - totalYards).toFixed(2)} yds</span>
                    </div>
                 </div>
-
-                {tooMany && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 flex items-start gap-2 animate-pulse">
-                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                    <p className="text-[10px] font-black uppercase tracking-tight leading-tight">Shortage: Roll has insufficient yards. Please reduce quantity.</p>
-                  </div>
-                )}
-
-                <button 
-                  onClick={handleSubmit} 
-                  disabled={!isReady || saving}
-                  className="w-full bg-[#10b981] disabled:bg-white/5 disabled:text-slate-700 text-black py-6 rounded-[2rem] font-black text-xl transition-all hover:scale-[1.02] active:scale-95 shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3"
-                >
+                <button onClick={handleSubmit} disabled={!isReady || saving} className="w-full bg-[#10b981] disabled:bg-white/5 disabled:text-slate-700 text-black py-6 rounded-[2rem] font-black text-xl transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3">
                   {saving ? <div className="w-6 h-6 border-4 border-black/20 border-t-black rounded-full animate-spin"/> : <><Check size={24} strokeWidth={3}/> SAVE ENTRY</>}
                 </button>
               </div>
@@ -310,46 +276,22 @@ const Production = () => {
           </div>
         </form>
       ) : (
-        /* HISTORY LOGS UI */
-        <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl animate-in slide-in-from-bottom-6 duration-700 shadow-2xl">
+        /* HISTORY LOGS */
+        <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl animate-in slide-in-from-bottom-6">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                <tr>
-                  <th className="p-6">Date</th>
-                  <th className="p-6">Identity</th>
-                  <th className="p-6">Core Specs</th>
-                  <th className="p-6 text-center">Batch Size</th>
-                  <th className="p-6 text-center">Net Yards</th>
-                  <th className="p-6 text-right">Actions</th>
-                </tr>
+                <tr><th className="p-6">Date</th><th className="p-6">Identity</th><th className="p-6">Core Specs</th><th className="p-6 text-center">Batch Size</th><th className="p-6 text-center">Net Yards</th><th className="p-6 text-right">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {productions.length === 0 ? (
-                  <tr><td colSpan={6} className="p-32 text-center text-slate-700 font-bold uppercase tracking-widest italic">No production activity recorded yet.</td></tr>
-                ) : productions.map(p => (
+                {productions.length === 0 ? (<tr><td colSpan={6} className="p-32 text-center text-slate-700 font-bold uppercase tracking-widest italic">No activity recorded yet.</td></tr>) : productions.map(p => (
                   <tr key={p._id} className="hover:bg-white/5 transition-all group">
                     <td className="p-6 text-sm font-bold text-slate-500 font-mono">{p.date}</td>
-                    <td className="p-6">
-                      <div className="flex items-center gap-4">
-                         <div className="w-12 h-12 rounded-2xl bg-black/40 flex items-center justify-center font-black text-[#10b981] border border-white/5 shadow-inner text-lg">#{p.roll_no}</div>
-                         <div><p className="text-sm font-black text-white">{p.jambo_type}</p><p className="text-[10px] font-black text-slate-500 uppercase">{p.micron}μ • {p.width}mm</p></div>
-                      </div>
-                    </td>
-                    <td className="p-6">
-                       <span className="text-xs font-black text-white uppercase tracking-tight">{p.core_brand}</span>
-                       <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase mt-0.5">
-                          <span className="text-[#10b981] bg-[#10b981]/10 px-1.5 rounded-md">{p.core_side}</span>
-                          <span>• {p.core_ply} Ply</span>
-                       </div>
-                    </td>
+                    <td className="p-6"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-black/40 flex items-center justify-center font-black text-[#10b981] border border-white/5 shadow-inner text-lg">#{p.roll_no}</div><div><p className="text-sm font-black text-white">{p.jambo_type}</p><p className="text-[10px] font-black text-slate-500 uppercase">{p.micron}μ • {p.width}mm</p></div></div></td>
+                    <td className="p-6"><span className="text-xs font-black text-white uppercase tracking-tight">{p.core_brand}</span><div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase mt-0.5"><span className="text-[#10b981] bg-[#10b981]/10 px-1.5 rounded-md">{p.core_side}</span><span>• {p.core_ply} Ply</span></div></td>
                     <td className="p-6 text-center font-black text-xl">{p.core_qty_used} <small className="text-[9px] opacity-40 uppercase tracking-tighter">pcs</small></td>
                     <td className="p-6 text-center font-black text-xl text-[#10b981]">{p.yards_used} <small className="text-[9px] opacity-40 uppercase tracking-tighter">yds</small></td>
-                    <td className="p-6 text-right">
-                      <button onClick={() => handleDelete(p)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-lg shadow-red-500/20">
-                        <Trash2 size={18}/>
-                      </button>
-                    </td>
+                    <td className="p-6 text-right"><button onClick={() => handleDelete(p)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-lg shadow-red-500/20"><Trash2 size={18}/></button></td>
                   </tr>
                 ))}
               </tbody>
