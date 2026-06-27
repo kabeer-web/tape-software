@@ -1,12 +1,12 @@
-import { useState, useRef, useContext } from 'react';
+import { useState, useRef, useContext, useEffect } from 'react';
 import {
   FileText, Plus, Trash2, Printer,
-  Upload, X, Save, AlertCircle, CheckCircle2, Box
+  Upload, X, Save, AlertCircle, CheckCircle2, Box, Database, ArrowRight
 } from 'lucide-react';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext } from '../StockContext';
 
-// ── Number to words ──────────────────────────────────────
+// ── Number to words logic ────────────────────────────────
 const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
 const tens  = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
 function numToWords(n) {
@@ -28,12 +28,11 @@ const toWords = (n) => {
 const ADDR  = 'PLOT #356-5, SECTOR 5-B, SAEEDABAD BALDIA TOWN S.I.T.E KARACHI';
 const PHONE = 'Phone: 0313-2400511 & 0308-7058453';
 
-const COLOURS = ['Clear','Tan','Cloth','Masking','Tissue','Super Yellow','Super Clear','Color','Foam','Black','White','Brown','Silver','Custom'];
+const COLOURS = ['Clear','Tan','Cloth','Masking','Tissue','Super Yellow','Super Clear','Color','Foam','Black','White','Brown','Silver'];
 const BRANDS        = ['Tesco','Bell','Race','Jhonson','HS Packages','Local','Imported'];
-const MICRONS       = ['37μ','39μ','40μ','42μ','43μ','44μ','45μ','48μ','50μ'];
+const MICRONS       = ['37μ','39μ','40μ','42μ','43μ','44μ','45μ','48μ'];
 const SIZE_MM       = ['720','900','1280','1600','2400'];
-const SIZE_INCH     = ['1/2"','1"','2"','3"','4"','6"','Custom'];
-const YARDS_LIST    = ['40','50','80','100','150','200'];
+const SIZE_INCH     = ['1/2"','1"','2"','3"','4"','6"'];
 const CARTON_BRANDS = ['Bell','Race','Tesco','Jhonson'];
 const CARTON_SIZES  = ['10','10.5','11','12'];
 
@@ -46,267 +45,235 @@ const SelectOrCustom = ({ value, onChange, options, placeholder }) => {
   const handleSelect = (v) => { if (v === '__custom__') { setCustom(true); onChange(''); } else { setCustom(false); onChange(v); } };
   return (
     <div className="flex flex-col gap-1">
-      <select value={custom ? '__custom__' : value} onChange={e => handleSelect(e.target.value)} className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
+      <select value={custom ? '__custom__' : value} onChange={e => handleSelect(e.target.value)} className="bg-black/30 p-2.5 rounded-xl border border-white/10 outline-none text-sm focus:border-emerald-500 transition-all">
         <option value="">{placeholder}</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
         <option value="__custom__">✏️ Custom...</option>
       </select>
-      {custom && <input autoFocus value={value} onChange={e => onChange(e.target.value)} placeholder="Type value..." className="bg-black/30 p-2 rounded-xl border border-[#22c55e]/40 outline-none text-sm" />}
+      {custom && <input autoFocus value={value} onChange={e => onChange(e.target.value)} placeholder="Type value..." className="bg-black/40 p-2 rounded-xl border border-emerald-500/50 outline-none text-sm text-white mt-1" />}
     </div>
   );
 };
 
-const ErrMsg = ({ msg }) => msg ? <p className="text-red-400 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10}/>{msg}</p> : null;
-
-// ── DESIGN REDESIGN: Print HTML Generator ────────────────
+// ── PREMIUM PRINT HTML GENERATOR ────────────────────────
 export const generateInvoiceHTML = (bill) => {
-  const { billNo, partyName, date, items, grandTotal, totalCartonCount, logo } = bill;
-  const logoHtml = logo ? `<img src="${logo}" style="height:60px;object-fit:contain;"/>` : `<div style="font-size:24px;font-weight:900;">HS Packages</div>`;
-
-  const rowsHtml = (items || []).map((r, i) => {
-    const size = r.sizeLabel || [r.sizeMm ? `${r.sizeMm}mm` : '', r.sizeInch ? `${r.sizeInch}` : '', r.yards ? `${r.yards}yds` : ''].filter(Boolean).join(' / ');
-    return `
-    <tr>
-      <td style="text-align:center">${i + 1}</td>
-      <td style="font-weight:600">${size}</td>
-      <td>${r.colour || '—'}</td>
-      <td>${r.brand || '—'}</td>
-      <td style="text-align:center">${r.micron || '—'}</td>
-      <td style="text-align:center">${r.totalCarton}</td>
-      <td style="text-align:center">${r.perCtnQty}</td>
-      <td style="text-align:center;font-weight:700">${r.totalQty}</td>
-      <td style="text-align:right">${(r.rate || 0).toLocaleString()}</td>
-      <td style="text-align:right;font-weight:700">${(r.total || 0).toLocaleString()}</td>
-    </tr>`;
-  }).join('');
-
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice #${billNo}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#000;padding:30px 40px;line-height:1.4}
-  .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #000;padding-bottom:15px;margin-bottom:20px}
-  .co-name{font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:4px}
-  .co-info{font-size:10px;color:#333;font-weight:500}
-  .inv-title{text-align:right}
-  .inv-title h1{font-size:28px;font-weight:900;letter-spacing:4px;margin-bottom:5px}
+    const { billNo, partyName, date, items, grandTotal, totalCartonCount, logo } = bill;
+    const logoImgHtml = logo ? `<img src="${logo}" style="height:65px; object-fit:contain;"/>` : '';
   
-  .meta-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:15px;margin-bottom:25px}
-  .meta-item{border:1px solid #ddd;padding:10px;border-radius:5px}
-  .meta-label{font-size:8px;text-transform:uppercase;color:#666;font-weight:bold;margin-bottom:3px}
-  .meta-value{font-size:12px;font-weight:700}
-
-  table{width:100%;border-collapse:collapse;margin-bottom:25px}
-  thead th{background:#f0f0f0;color:#000;padding:10px 5px;font-size:9px;text-transform:uppercase;border:1.5px solid #000}
-  tbody td{padding:8px 5px;border:1px solid #eee;border-bottom:1px solid #ddd}
-  tbody tr:nth-child(even){background:#fafafa}
-
-  .footer-area{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
-  .words-box{flex:1;border:1px solid #ddd;padding:12px;border-radius:5px;min-height:60px}
-  .total-card{width:280px;border:3px solid #000;padding:15px;text-align:center;border-radius:8px}
-  .total-label{font-size:10px;font-weight:bold;text-transform:uppercase;margin-bottom:5px}
-  .total-val{font-size:26px;font-weight:900}
-
-  .sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:50px;margin-top:80px}
-  .sig-line{border-top:1.5px solid #000;text-align:center;padding-top:8px;font-weight:bold;font-size:10px;text-transform:uppercase}
-  @media print{@page{margin:10mm;size:A4}}
+    const rowsHtml = (items || []).map((r, i) => `
+      <tr>
+        <td style="text-align:center; border:1px solid #000; padding:8px;">${i + 1}</td>
+        <td style="font-weight:bold; border:1px solid #000; padding:8px;">${r.sizeLabel}</td>
+        <td style="border:1px solid #000; padding:8px;">${r.colour || '—'}</td>
+        <td style="border:1px solid #000; padding:8px;">${r.brand || '—'}</td>
+        <td style="text-align:center; border:1px solid #000; padding:8px;">${r.micron || '—'}</td>
+        <td style="text-align:center; border:1px solid #000; padding:8px;">${Number(r.totalCarton)}</td>
+        <td style="text-align:center; border:1px solid #000; padding:8px;">${Number(r.perCtnQty)}</td>
+        <td style="text-align:center; font-weight:bold; background:#f9f9f9; border:1px solid #000; padding:8px;">${Number(r.totalQty)}</td>
+        <td style="text-align:right; border:1px solid #000; padding:8px;">${(r.rate || 0).toLocaleString()}</td>
+        <td style="text-align:right; border:1px solid #000; font-weight:900; padding:8px;">${(r.total || 0).toLocaleString()}</td>
+      </tr>`).join('');
+  
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice #${billNo}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box; font-family:'Segoe UI', sans-serif;}
+  body{padding:40px; color:#000; background:#fff; line-height:1.2;}
+  .hdr{display:flex; justify-content:space-between; align-items:center; border-bottom:4px solid #000; padding-bottom:15px; margin-bottom:25px;}
+  .logo-area{display:flex; align-items:center; gap:20px;}
+  .co-name{font-size:28px; font-weight:900; text-transform:uppercase;}
+  .co-info{font-size:10px; color:#333; margin-top:8px;}
+  .meta-grid{display:grid; grid-template-columns:1.5fr 1fr; gap:30px; margin-bottom:25px;}
+  .buyer-box{border:3px solid #000; padding:15px;}
+  .main-table{width:100%; border-collapse:collapse; margin-bottom:25px; border:2px solid #000;}
+  th{background:#000; color:#fff; padding:12px 5px; font-size:9px; text-transform:uppercase; border:1px solid #000;}
+  .total-box{width:320px; border:5px solid #000; padding:20px; text-align:right;}
+  .total-val{font-size:32px; font-weight:900;}
+  .sig-line{border-top:2px solid #000; text-align:center; padding-top:10px; font-weight:bold; font-size:11px; text-transform:uppercase;}
 </style></head><body>
 <div class="hdr">
-  <div>${logoHtml}<div class="co-info">${ADDR}<br/>${PHONE}</div></div>
-  <div class="inv-title"><h1>INVOICE</h1><div style="font-weight:bold;font-size:12px">Original Copy</div></div>
+  <div class="logo-area">${logoImgHtml}<div><span class="co-name">HS PACKAGES</span><div class="co-info">${ADDR}<br/>${PHONE}</div></div></div>
+  <div style="text-align:right"><h1>INVOICE</h1><strong>No: #${billNo}</strong><br/>Date: ${date}</div>
 </div>
 <div class="meta-grid">
-  <div class="meta-item"><div class="meta-label">Customer / Buyer</div><div class="meta-value">${partyName || '—'}</div></div>
-  <div class="meta-item"><div class="meta-label">Invoice Number</div><div class="meta-value">#${billNo || '—'}</div></div>
-  <div class="meta-item"><div class="meta-label">Date of Issue</div><div class="meta-value">${date}</div></div>
+  <div class="buyer-box">Bill To:<br/><div style="font-size:22px; font-weight:900;">${partyName}</div></div>
+  <div style="text-align:right">Total Cartons: <strong>${Number(totalCartonCount)}</strong></div>
 </div>
-<table>
-  <thead><tr><th>#</th><th>Product Description</th><th>Color</th><th>Brand</th><th>MIC</th><th>CTN</th><th>P.Qty</th><th>Total Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+<table class="main-table">
+  <thead><tr><th>#</th><th>Description</th><th>Color</th><th>Brand</th><th>MIC</th><th>CTN</th><th>P.Qty</th><th>Total</th><th>Rate</th><th>Amount</th></tr></thead>
   <tbody>${rowsHtml}</tbody>
 </table>
-<div class="footer-area">
-  <div class="words-box">
-    <div class="meta-label" style="margin-bottom:8px">Amount in Words</div>
-    <div style="font-size:11px;font-weight:bold;font-style:italic">"${toWords(grandTotal)}"</div>
-    <div style="margin-top:15px;font-size:12px;font-weight:bold">Total Cartons: ${totalCartonCount} CTN</div>
-  </div>
-  <div class="total-card">
-    <div class="total-label">Grand Total (PKR)</div>
-    <div class="total-val">${grandTotal.toLocaleString()}</div>
-  </div>
+<div style="display:flex; justify-content:space-between; gap:30px;">
+  <div style="flex:1; border:1px solid #ccc; padding:15px; border-radius:4px;">Amount in Words:<br/><strong>${toWords(grandTotal)}</strong></div>
+  <div class="total-box">Grand Total:<div class="total-val">Rs. ${grandTotal.toLocaleString()}</div></div>
 </div>
-<div class="sigs">
-  <div class="sig-line">Prepared By</div>
-  <div class="sig-line">Receiver's Signature</div>
-  <div class="sig-line">Authorized Manager</div>
+<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:50px; margin-top:100px;">
+  <div class="sig-line">Prepared By</div><div class="sig-line">Receiver's Sign</div><div class="sig-line">Authorized Signatory</div>
 </div>
-<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
+<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>
 </body></html>`;
 };
 
 const SaleInvoice = () => {
   const { saveBill }                  = useAccounts();
-  const { inventory, updateStock }    = useContext(StockContext);
+  const { inventory, updateStock, refreshInventory } = useContext(StockContext);
 
   const [billNo,     setBillNo]     = useState('');
   const [buyerName,  setBuyerName]  = useState('');
   const [date,       setDate]       = useState(new Date().toLocaleDateString('en-GB'));
   const [form,       setForm]       = useState(emptyItem);
-  const [formErrs,   setFormErrs]   = useState({});
-  const [headerErrs, setHeaderErrs] = useState({});
   const [rows,       setRows]       = useState([]);
   const [carton,     setCarton]     = useState(emptyCarton);
   const [logo,       setLogo]       = useState(null);
-  const [msg,        setMsg]        = useState('');
-  const [cartonMsg,  setCartonMsg]  = useState(''); // SEPARATE ENGLISH NOTIFICATION
+  const [popMsg,     setPopMsg]     = useState('');
+  const [availableStock, setAvailableStock] = useState(null);
   const [saving,     setSaving]     = useState(false);
   const fileRef = useRef(null);
 
-  const upd  = (k, v) => { setForm(p => ({...p, [k]: v})); setFormErrs(p => ({...p, [k]: ''})); };
+  // ── AUTO STOCK FETCHING (When user selects Brand/Size) ──
+  useEffect(() => {
+    if (carton.brand && carton.type && carton.size) {
+      const match = inventory.find(i => 
+        String(i.brand).toLowerCase() === String(carton.brand).toLowerCase() && 
+        (String(i.category).toLowerCase() === 'carton' || String(i.type).toLowerCase() === 'carton') && 
+        String(i.carton_type || i.cartonType || '').toLowerCase() === String(carton.type).toLowerCase() && 
+        parseFloat(i.size) === parseFloat(carton.size)
+      );
+      setAvailableStock(match ? match.qty : 0);
+    } else { setAvailableStock(null); }
+  }, [carton, inventory]);
+
+  const upd  = (k, v) => setForm(p => ({...p, [k]: v}));
   const updC = (k, v) => setCarton(p => ({...p, [k]: v}));
 
-  const validateItem = () => {
-    const e = {};
-    if (!form.sizeMm && !form.sizeInch) e.size = 'Size required';
-    if (!form.totalCarton) e.totalCarton = 'Required';
-    if (!form.perCtnQty) e.perCtnQty = 'Required';
-    if (!form.rate) e.rate = 'Required';
-    setFormErrs(e);
-    return Object.keys(e).length === 0;
-  };
+  // ── MANUAL DEDUCT LOGIC ──
+  const handleRemoveCarton = async () => {
+    if (!carton.brand || !carton.qty || carton.qty <= 0) { alert("Pehle Brand aur Qty select karein."); return; }
+    const match = inventory.find(i => 
+        String(i.brand).toLowerCase() === String(carton.brand).toLowerCase() && 
+        (String(i.category).toLowerCase() === 'carton' || String(i.type).toLowerCase() === 'carton') && 
+        String(i.carton_type || i.cartonType || '').toLowerCase() === String(carton.type).toLowerCase() && 
+        parseFloat(i.size) === parseFloat(carton.size)
+    );
 
-  const validateHeader = () => {
-    const e = {};
-    if (!billNo.trim()) e.billNo = 'Bill No required';
-    if (!buyerName.trim()) e.buyerName = 'Buyer name required';
-    setHeaderErrs(e);
-    return Object.keys(e).length === 0;
+    if (match) {
+      await updateStock(match.id || match._id, -parseInt(carton.qty));
+      setPopMsg(`Inventory Successfully Updated: Removed ${carton.qty} Cartons from ${carton.brand} (${carton.size}") stock.`);
+      setTimeout(() => setPopMsg(''), 6000);
+      refreshInventory();
+    } else { alert("DATABASE ERROR: Carton not found."); }
   };
 
   const addItem = () => {
-    if (!validateItem()) return;
-    const tc = parseFloat(form.totalCarton) || 0;
-    const pc = parseFloat(form.perCtnQty)   || 0;
-    const r  = parseFloat(form.rate)        || 0;
-    const totalQty = tc * pc;
-    const total    = totalQty * r;
+    if (!form.totalCarton || !form.rate) return;
+    const tc = parseFloat(form.totalCarton);
+    const pc = parseFloat(form.perCtnQty);
     const sizeLabel = [form.sizeMm ? `${form.sizeMm}mm` : '', form.sizeInch ? `${form.sizeInch}` : '', form.yards ? `${form.yards}yds` : ''].filter(Boolean).join(' / ');
-    setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total }]);
+    setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalQty: tc * pc, total: (tc * pc) * parseFloat(form.rate) }]);
     setForm(emptyItem);
   };
 
   const handleSave = async () => {
-    if (!validateHeader()) return;
-    if (rows.length === 0) { setMsg('❌ Koi item add nahi hua!'); return; }
+    if (!billNo || !buyerName || rows.length === 0) return;
     setSaving(true);
-    try {
-      if (carton.brand && carton.qty) {
-        const cartonInv = inventory.find(i => i.brand === carton.brand && i.category === 'Carton' && (i.carton_type || i.cartonType) === carton.type && String(i.size) === String(carton.size));
-        if (cartonInv) {
-          await updateStock(cartonInv._id, -parseInt(carton.qty));
-          setCartonMsg(`Inventory Updated: ${carton.qty} ${carton.brand} ${carton.type} Cartons deducted successfully.`);
-        }
-      }
-      await saveBill({ billType: 'Sale', billNo, partyName: buyerName, date, items: rows, grandTotal, totalCartonCount, cartonUsed: carton.brand ? carton : null, logo });
-      setMsg(`✅ Bill #${billNo} save ho gaya!`);
-      setRows([]); setBillNo(''); setBuyerName(''); setCarton(emptyCarton); setHeaderErrs({});
-      setTimeout(() => { setMsg(''); setCartonMsg(''); }, 6000);
-    } catch (err) { setMsg('❌ Error: ' + err.message); } finally { setSaving(false); }
-  };
-
-  const handlePrint = () => {
-    if (rows.length === 0) return;
-    const html = generateInvoiceHTML({ billNo, partyName: buyerName, date, items: rows, grandTotal, totalCartonCount, logo });
-    const w = window.open('', '_blank'); w.document.write(html); w.document.close();
+    await saveBill({ billType: 'Sale', billNo, partyName: buyerName, date, items: rows, grandTotal: rows.reduce((s,r)=>s+r.total,0), totalCartonCount: rows.reduce((s,r)=>s+Number(r.totalCarton),0), logo });
+    setPopMsg(`✅ DATABASE SYNC: Bill #${billNo} has been saved successfully.`);
+    setRows([]); setBillNo(''); setBuyerName(''); setSaving(false);
   };
 
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
-  const totalCartonCount = rows.reduce((s, r) => s + (r.totalCarton || 0), 0);
+  const totalCartonCount = rows.reduce((s, r) => s + (Number(r.totalCarton) || 0), 0);
 
   return (
-    <div className="text-white min-h-screen pb-10">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3"><FileText className="text-[#22c55e]" size={22}/><div><h1 className="text-2xl font-black">SALE <span className="text-[#22c55e]">INVOICE</span></h1><p className="text-gray-500 text-xs font-bold uppercase">Ready for Printing</p></div></div>
-        <div className="flex gap-2">
-          <button onClick={handleSave} disabled={rows.length===0 || saving} className="bg-white/[0.05] border border-[#22c55e]/30 text-[#22c55e] font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 hover:bg-[#22c55e]/10 transition disabled:opacity-30 text-sm"><Save size={14}/>{saving ? 'Saving...' : 'Save Bill'}</button>
-          <button onClick={handlePrint} disabled={rows.length===0} className="bg-[#22c55e] text-black font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 hover:bg-[#1db954] transition disabled:opacity-30 text-sm"><Printer size={14}/> Print</button>
-        </div>
-      </div>
-
-      {/* SEPARATE ENGLISH NOTIFICATION FOR CARTON STOCK */}
-      {cartonMsg && (
-        <div className="mb-4 p-4 rounded-2xl bg-blue-500/10 border border-blue-500/40 text-blue-400 flex items-center gap-3 animate-in slide-in-from-top duration-300">
-           <Box size={20} />
-           <p className="text-sm font-bold tracking-wide">{cartonMsg}</p>
+    <div className="text-white min-h-screen pb-10 max-w-6xl mx-auto px-4">
+      
+      {/* GLOBAL POP-UP NOTIFICATION */}
+      {popMsg && (
+        <div className="fixed top-10 right-10 z-50 bg-[#10b981] text-black p-5 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-right duration-500 border border-white/20">
+           <div className="bg-black/20 p-2 rounded-full"><CheckCircle2 size={24}/></div>
+           <p className="font-bold text-sm">{popMsg}</p>
+           <button onClick={()=>setPopMsg('')}><X size={18}/></button>
         </div>
       )}
 
-      {msg && <div className={`mb-4 p-3 rounded-xl text-sm font-bold border ${msg.startsWith('✅') ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]' : 'bg-red-500/10 border-red-500/40 text-red-400'}`}>{msg}</div>}
-
-      {/* Bill Header Info */}
-      <div className="bg-white/[0.03] p-6 rounded-[2rem] border border-[#22c55e]/20 mb-5">
-        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/5 mb-4">
-          <div className="flex items-center gap-4">
-            {logo ? <div className="relative group shrink-0"><img src={logo} className="h-14 w-auto object-contain rounded-xl border border-white/10 p-1"/><button onClick={() => setLogo(null)} className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5"><X size={9}/></button></div> : <button onClick={() => fileRef.current?.click()} className="flex flex-col items-center justify-center gap-1 w-16 h-14 border-2 border-dashed border-[#22c55e]/30 rounded-xl text-[#22c55e]/50 hover:border-[#22c55e] transition text-[8px] font-bold"><Upload size={13}/>LOGO</button>}
-            <input ref={fileRef} type="file" accept="image/*" onChange={(e)=>{const f=e.target.files[0]; if(f){const rd=new FileReader(); rd.onload=()=>setLogo(rd.result); rd.readAsDataURL(f);}}} className="hidden"/>
-            <div><p className="text-xl font-black">HS Packages</p><p className="text-[10px] text-gray-500 max-w-[200px]">{ADDR}</p></div>
-          </div>
-          <p className="text-2xl font-black text-[#22c55e] tracking-[0.2em] italic">INVOICE</p>
+      {/* Header */}
+      <div className="flex justify-between items-center mb-8 pt-8">
+        <div>
+          <h1 className="text-4xl font-black italic text-[#10b981]">HS <span className="text-white">PACKAGES</span></h1>
+          <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Industrial Billing System</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase font-black ml-1">Bill No</label><input value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="1001" className="w-full bg-black/30 p-3 rounded-2xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]"/></div>
-          <div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase font-black ml-1">Buyer Name</label><input value={buyerName} onChange={e=>setBuyerName(e.target.value)} placeholder="Party Name" className="w-full bg-black/30 p-3 rounded-2xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]"/></div>
-          <div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase font-black ml-1">Date</label><input value={date} onChange={e=>setDate(e.target.value)} className="w-full bg-black/30 p-3 rounded-2xl border border-[#22c55e]/20 outline-none"/></div>
+        <div className="flex gap-3">
+          <button onClick={handleSave} disabled={saving || rows.length === 0} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-6 py-3 rounded-2xl font-black text-xs hover:bg-emerald-500 hover:text-black transition-all">SAVE TO DB</button>
+          <button onClick={() => {const h = generateInvoiceHTML({billNo, partyName:buyerName, date, items:rows, grandTotal, totalCartonCount, logo}); const w = window.open('','_blank'); w.document.write(h); w.document.close();}} className="bg-emerald-500 text-black px-6 py-3 rounded-2xl font-black text-xs hover:scale-105 transition-all shadow-[0_0_20px_rgba(34,197,94,0.3)]"><Printer size={16}/> PRINT</button>
         </div>
       </div>
 
-      {/* Form & Items (Code Logic Unchanged) */}
-      <div className="bg-white/[0.03] p-6 rounded-[2rem] border border-[#22c55e]/20 mb-5">
-        <div className="flex bg-black/40 rounded-xl border border-[#22c55e]/20 overflow-hidden w-fit mb-4">
-          <button onClick={() => upd('sizeUnit', 'mm')} className={`px-6 py-2 text-xs font-bold transition ${form.sizeUnit === 'mm' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>Millimeter (mm)</button>
-          <button onClick={() => upd('sizeUnit', 'inch')} className={`px-6 py-2 text-xs font-bold transition ${form.sizeUnit === 'inch' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>Inches (")</button>
+      {/* Logo & Meta Card */}
+      <div className="bg-white/[0.03] border border-white/10 p-8 rounded-[2.5rem] mb-6 flex flex-col md:flex-row gap-8 items-center backdrop-blur-xl">
+        <div className="shrink-0 text-center">
+          {logo ? (
+            <div className="relative group"><img src={logo} className="h-24 w-auto object-contain rounded-xl border border-white/10 p-2 bg-black/20"/><button onClick={()=>setLogo(null)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><X size={12}/></button></div>
+          ) : (
+            <button onClick={()=>fileRef.current?.click()} className="w-28 h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center text-gray-500 hover:border-[#10b981] hover:text-[#10b981] transition-all"><Upload size={24}/><span className="text-[8px] font-black mt-1 uppercase">Select Logo</span></button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" onChange={(e)=>{const rd=new FileReader(); rd.onload=()=>setLogo(rd.result); rd.readAsDataURL(e.target.files[0]);}} className="hidden"/>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          {form.sizeUnit === 'mm' ? <SelectOrCustom value={form.sizeMm} onChange={v => upd('sizeMm', v)} options={SIZE_MM} placeholder="Select mm"/> : <SelectOrCustom value={form.sizeInch} onChange={v => upd('sizeInch', v)} options={SIZE_INCH} placeholder="Select inch"/>}
-          <SelectOrCustom value={form.yards} onChange={v => upd('yards', v)} options={YARDS_LIST} placeholder="Yards"/>
-          <SelectOrCustom value={form.colour} onChange={v => upd('colour', v)} options={COLOURS} placeholder="Colour"/>
-          <SelectOrCustom value={form.brand} onChange={v => upd('brand', v)} options={BRANDS} placeholder="Brand"/>
-          <SelectOrCustom value={form.micron} onChange={v => upd('micron', v)} options={MICRONS} placeholder="Micron"/>
-          <input type="number" placeholder="Total CTN" value={form.totalCarton} onChange={e => upd('totalCarton', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
-          <input type="number" placeholder="Rolls P.CTN" value={form.perCtnQty} onChange={e => upd('perCtnQty', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
-          <input type="number" placeholder="Rate" value={form.rate} onChange={e => upd('rate', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
-        </div>
-        <button onClick={addItem} className="bg-[#22c55e] text-black font-black px-8 py-3 rounded-2xl flex items-center gap-2 hover:bg-emerald-400 transition text-xs uppercase tracking-widest"><Plus size={16}/> Add to List</button>
-      </div>
-
-      {/* Internal Stock Carton (Simplified UI) */}
-      <div className="bg-yellow-500/5 p-5 rounded-[2rem] border border-yellow-500/20 mb-5">
-        <p className="text-[10px] text-yellow-500 uppercase font-black tracking-widest mb-3 flex items-center gap-2"><Box size={14}/> Stock Sync (Internal Carton Use)</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <select value={carton.brand} onChange={e => updC('brand', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none">{CARTON_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}</select>
-          <select value={carton.type} onChange={e => updC('type', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"><option value="Small">Small</option><option value="Large">Large</option></select>
-          <select value={carton.size} onChange={e => updC('size', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none">{CARTON_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}</select>
-          <input type="number" value={carton.qty} onChange={e => updC('qty', e.target.value)} placeholder="Qty" className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"/>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 w-full text-white font-bold">
+          <div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase">Invoice #</label><input value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="001" className="w-full bg-black/40 p-4 rounded-2xl border border-white/5 outline-none focus:border-emerald-500"/></div>
+          <div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase">Customer</label><input value={buyerName} onChange={e=>setBuyerName(e.target.value)} placeholder="Party Name" className="w-full bg-black/40 p-4 rounded-2xl border border-white/5 outline-none focus:border-emerald-500"/></div>
+          <div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase">Date</label><input value={date} onChange={e=>setDate(e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/5 outline-none font-bold text-slate-400"/></div>
         </div>
       </div>
 
-      {/* Table & Footer (Logic Same) */}
-      <div className="bg-white/[0.02] rounded-[2rem] border border-white/5 overflow-hidden mb-8">
+      {/* Product Input Section */}
+      <div className="bg-white/[0.03] border border-white/10 p-8 rounded-[2.5rem] mb-6 shadow-xl">
+         <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5 w-fit mb-6">
+            <button onClick={() => upd('sizeUnit', 'mm')} className={`px-8 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all ${form.sizeUnit === 'mm' ? 'bg-[#10b981] text-black' : 'text-gray-500'}`}>MM</button>
+            <button onClick={() => upd('sizeUnit', 'inch')} className={`px-8 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all ${form.sizeUnit === 'inch' ? 'bg-[#10b981] text-black' : 'text-gray-500'}`}>Inches</button>
+         </div>
+         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+            {form.sizeUnit === 'mm' ? <SelectOrCustom value={form.sizeMm} onChange={v=>upd('sizeMm',v)} options={SIZE_MM} placeholder="Size MM"/> : <SelectOrCustom value={form.sizeInch} onChange={v=>upd('sizeInch',v)} options={SIZE_INCH} placeholder="Size INCH"/>}
+            <SelectOrCustom value={form.yards} onChange={v=>upd('yards',v)} options={['40','50','80','100','150','200']} placeholder="Yards"/>
+            <SelectOrCustom value={form.colour} onChange={v=>upd('colour',v)} options={COLOURS} placeholder="Colour"/>
+            <SelectOrCustom value={form.brand} onChange={v=>upd('brand',v)} options={BRANDS} placeholder="Brand"/>
+            <input type="number" placeholder="Rate" value={form.rate} onChange={e=>upd('rate',e.target.value)} className="bg-black/40 p-4 rounded-2xl border border-white/10 outline-none text-white font-bold"/>
+            <input type="number" placeholder="Total CTN" value={form.totalCarton} onChange={e=>upd('totalCarton',e.target.value)} className="bg-black/40 p-4 rounded-2xl border border-white/10 outline-none text-white font-bold"/>
+            <input type="number" placeholder="P/CTN" value={form.perCtnQty} onChange={e=>upd('perCtnQty',e.target.value)} className="bg-black/40 p-4 rounded-2xl border border-white/10 outline-none text-white font-bold"/>
+            <button onClick={addItem} className="col-span-2 bg-[#10b981] text-black font-black p-4 rounded-2xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2 text-xs uppercase tracking-widest"><Plus size={18}/> ADD TO LIST</button>
+         </div>
+      </div>
+
+      {/* Manual Stock Control Box */}
+      <div className="bg-amber-500/5 border-2 border-amber-500/10 p-8 rounded-[2.5rem] mb-8 relative overflow-hidden group">
+        <div className="absolute right-0 top-0 opacity-10 rotate-12"><Database size={200}/></div>
+        <div className="flex items-center justify-between mb-6 relative z-10">
+           <div className="flex items-center gap-3"><div className="p-3 bg-amber-500 rounded-2xl text-black shadow-lg"><Box size={22}/></div><div><p className="text-amber-500 font-black uppercase tracking-widest text-[10px]">Inventory Link</p><h3 className="text-white font-bold">Manual Carton Deduction</h3></div></div>
+           {availableStock !== null && <div className={`px-4 py-2 rounded-xl font-black text-xs border ${availableStock > 5 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400 animate-pulse'}`}>Stock in DB: {Number(availableStock)} CTN</div>}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 relative z-10">
+          <select value={carton.brand} onChange={e=>updC('brand',e.target.value)} className="bg-black/60 p-4 rounded-2xl border border-amber-500/20 text-white outline-none">{CARTON_BRANDS.map(b=><option key={b} value={b}>{b}</option>)}</select>
+          <select value={carton.type} onChange={e=>updC('type',e.target.value)} className="bg-black/60 p-4 rounded-2xl border border-amber-500/20 text-white outline-none"><option value="Small">Small</option><option value="Large">Large</option></select>
+          <select value={carton.size} onChange={e=>updC('size',e.target.value)} className="bg-black/60 p-4 rounded-2xl border border-amber-500/20 text-white outline-none">{CARTON_SIZES.map(s=><option key={s} value={s}>{s}"</option>)}</select>
+          <input type="number" value={carton.qty} onChange={e=>updC('qty',e.target.value)} placeholder="Minus Qty" className="w-full bg-black/60 p-4 rounded-2xl border-2 border-amber-500/20 font-black text-amber-500 outline-none"/>
+          <button onClick={handleRemoveCarton} className="bg-amber-500 text-black font-black p-4 rounded-2xl hover:scale-105 active:scale-95 transition-all text-[10px] uppercase shadow-lg shadow-amber-500/20">DEDUCT FROM STOCK</button>
+        </div>
+      </div>
+
+      {/* Main Table */}
+      <div className="bg-white/[0.01] border border-white/5 rounded-[2.5rem] overflow-hidden mb-8 shadow-inner">
         <table className="w-full text-left">
-          <thead className="bg-white/5 text-[10px] uppercase font-black text-slate-500"><tr><th className="p-5">#</th><th>Description</th><th className="text-center">CTN</th><th className="text-center">Total Qty</th><th className="text-right">Rate</th><th className="text-right p-5">Amount</th><th className="p-5"></th></tr></thead>
+          <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest"><tr><th className="p-6">Description</th><th className="text-center">CTN</th><th className="text-center">Rolls</th><th className="text-right">Rate</th><th className="text-right p-6">Amount</th><th className="p-6"></th></tr></thead>
           <tbody className="divide-y divide-white/5">
-            {rows.map((r, i) => (
-              <tr key={r.id} className="hover:bg-white/5 transition"><td className="p-5 text-gray-500">{i+1}</td><td><p className="font-bold">{r.brand} - {r.colour}</p><p className="text-[10px] text-gray-500 uppercase">{r.sizeLabel}</p></td><td className="text-center font-bold">{r.totalCarton}</td><td className="text-center text-emerald-500 font-bold">{r.totalQty}</td><td className="text-right font-mono text-xs">{r.rate.toLocaleString()}</td><td className="text-right font-black text-white p-5">{r.total.toLocaleString()}</td><td className="p-5"><button onClick={() => removeRow(r.id)} className="text-gray-600 hover:text-red-500 transition"><Trash2 size={16}/></button></td></tr>
+            {rows.map(r => (
+              <tr key={r.id} className="hover:bg-white/5 transition-all"><td className="p-6 font-bold text-white uppercase tracking-tighter">{r.brand} - {r.colour}<p className="text-[10px] text-gray-500 mt-1 italic lowercase tracking-widest font-black">{r.sizeLabel}</p></td><td className="text-center font-black text-[#10b981] text-2xl">{Number(r.totalCarton)}</td><td className="text-center text-gray-400 font-bold">{Number(r.totalQty)} <small className="text-[8px] opacity-40">PCS</small></td><td className="text-right text-gray-300 font-mono">{r.rate.toLocaleString()}</td><td className="text-right font-black text-white text-2xl p-6">Rs. {r.total.toLocaleString()}</td><td className="p-6 text-right"><button onClick={()=>setRows(rows.filter(x=>x.id!==r.id))} className="text-red-500/20 p-2 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-lg"><Trash2 size={16}/></button></td></tr>
             ))}
           </tbody>
         </table>
       </div>
 
+      {/* Summary Footer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white/[0.03] p-6 rounded-[2rem] border border-white/5 flex flex-col justify-center"><p className="text-[10px] uppercase font-black text-gray-500 tracking-widest mb-2">In Words</p><p className="text-sm font-bold text-slate-300 italic">"{toWords(grandTotal)}"</p></div>
-        <div className="bg-emerald-500 p-6 rounded-[2rem] flex items-center justify-between shadow-2xl"><div className="text-emerald-950">
-          <p className="text-[10px] uppercase font-black tracking-widest opacity-60">Grand Total Payable</p>
-          <p className="text-xs font-bold">{totalCartonCount} Cartons Total</p></div>
-          <p className="text-4xl font-black text-emerald-950 tracking-tighter">Rs. {grandTotal.toLocaleString()}</p></div>
+        <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] flex flex-col justify-center shadow-lg"><p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Amount In Words</p><p className="text-sm font-black text-slate-400 italic">"${toWords(grandTotal)}"</p></div>
+        <div className="bg-[#10b981] p-8 rounded-[3rem] flex items-center justify-between shadow-2xl text-emerald-950 font-black uppercase"><div className="tracking-tighter leading-tight"><span className="opacity-60 text-xs font-bold uppercase">Grand Total Dispatch</span><p className="text-lg">{totalCartonCount} Units</p></div><p className="text-5xl tracking-tighter">Rs. {grandTotal.toLocaleString()}</p></div>
       </div>
     </div>
   );
