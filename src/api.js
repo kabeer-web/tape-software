@@ -1,18 +1,19 @@
 import { supabase } from './supabase';
 
-// ─── INVENTORY ──────────────────────────────────────────
-export const getInventory = async () => {
+export const addInventory = async (item) => {
+  // Database columns ke mutabiq map karna
+  const payload = {
+    ...item,
+    roll_no: item.rollNo, // Frontend se backend mapping
+    carton_type: item.cartonType
+  };
+  delete payload.rollNo;
+  delete payload.cartonType;
+
   const { data, error } = await supabase
-    .from('inventory')
-    .select('*')
-    .order('created_at', { ascending: false });
+    .from('inventory').insert([payload]).select().single();
   if (error) throw new Error(error.message);
-  return (data || []).map(row => ({
-    ...row,
-    _id: row.id,
-    rollNo: row.roll_no,
-    cartonType: row.carton_type,
-  }));
+  return { ...data, _id: data.id, rollNo: data.roll_no };
 };
 
 export const getInventoryByRoll = async (rollNo) => {
