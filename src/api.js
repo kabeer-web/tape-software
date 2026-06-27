@@ -16,6 +16,18 @@ export const addInventory = async (item) => {
   return { ...data, _id: data.id, rollNo: data.roll_no };
 };
 
+
+export const updateInventory = async (id, updates) => {
+  // Updates mein bhi mapping check karein
+  const payload = { ...updates };
+  if (updates.rollNo) { payload.roll_no = updates.rollNo; delete payload.rollNo; }
+
+  const { data, error } = await supabase
+    .from('inventory').update(payload).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id, rollNo: data.roll_no };
+};
+
 export const getInventoryByRoll = async (rollNo) => {
   const trimmed = String(rollNo).trim();
   const { data, error } = await supabase
