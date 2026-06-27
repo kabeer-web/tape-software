@@ -35,7 +35,7 @@ import Tesco from './Components/inventory/CORE BRANDS/tesco';
 import Jhonson from './Components/inventory/CORE BRANDS/jhonson';
 
 // Billing & Accounts
-import SaleInvoice from './Components/inventory/BILL/saleinvoice';
+import SaleInvoice from './Components/inventory/BILL/SaleInvoice';
 import PurchaseInvoice from './Components/inventory/BILL/purchaseinvoice';
 import SavedBills from './Components/inventory/BILL/SavedBills';
 import Ledger from './Components/inventory/ACCOUNTS/Ledger';
