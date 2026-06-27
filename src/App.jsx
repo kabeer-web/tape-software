@@ -9,6 +9,7 @@ import Dashboard from './Components/Dashboard';
 import MasterSearch from './Components/MasterSearch';
 import Login from './Components/Login';
 import Production from './Components/inventory/Production';
+
 // Jambo
 import JamboStock from './Components/inventory/JamboStock';
 import Clear from './Components/inventory/JAMBOFILES/clear';
@@ -34,7 +35,7 @@ import Race from './Components/inventory/CORE BRANDS/race';
 import Tesco from './Components/inventory/CORE BRANDS/tesco';
 import Jhonson from './Components/inventory/CORE BRANDS/jhonson';
 
-// Billing & Accounts
+// Billing & Accounts (YAHAN FIX KIYA HAI)
 import SaleInvoice from './Components/inventory/BILL/SaleInvoice';
 import PurchaseInvoice from './Components/inventory/BILL/PurchaseInvoice';
 import SavedBills from './Components/inventory/BILL/SavedBills';
@@ -142,7 +143,6 @@ function App() {
   );
 }
 
-// Agar already logged in ho to /login pe nahi jaega
 const PublicRoute = () => {
   const { user, loading } = useAuth();
   if (loading) return (
