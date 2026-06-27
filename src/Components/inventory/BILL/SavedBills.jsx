@@ -1,0 +1,614 @@
+import { useState } from 'react';
+import { useAccounts } from '../ACCOUNTS/AccountsContext';
+import {
+  FileText, Pencil, Trash2, Check, X,
+  Plus, Search, Printer
+} from 'lucide-react';
+
+// ── Number to words ───────────────────────────────────────
+const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+function numToWords(n) {
+  if (n===0) return 'zero';
+  if (n<20) return ones[n];
+  if (n<100) return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:'');
+  if (n<1000) return ones[Math.floor(n/100)]+' hundred'+(n%100?' '+numToWords(n%100):'');
+  if (n<100000) return numToWords(Math.floor(n/1000))+' thousand'+(n%1000?' '+numToWords(n%1000):'');
+  if (n<10000000) return numToWords(Math.floor(n/100000))+' lac'+(n%100000?' '+numToWords(n%100000):'');
+  return numToWords(Math.floor(n/10000000))+' crore'+(n%10000000?' '+numToWords(n%10000000):'');
+}
+const toWords = (n) => {
+  const r = Math.round(n);
+  if (!r) return 'Zero Rupees Only';
+  const w = numToWords(r);
+  return w[0].toUpperCase() + w.slice(1) + ' Rupees Only';
+};
+
+const ADDR  = 'PLOT #356-5, SECTOR 5-B, SAEEDABAD BALDIA TOWN S.I.T.E KARACHI';
+const PHONE = 'Phone: 0313-2400511 & 0308-7058453';
+
+// ── Print function (same format as SaleInvoice) ──────────
+const printBill = (bill) => {
+  if (bill.billType !== 'Sale') {
+    alert('Abhi sirf Sale bills print ho sakti hain.');
+    return;
+  }
+
+  const rowsHtml = (bill.items || []).map((r, i) => {
+    const size = r.sizeLabel || [
+      r.sizeMm    ? `${r.sizeMm}mm`  : '',
+      r.sizeInch  ? `${r.sizeInch}`  : '',
+      r.yards     ? `${r.yards}yds`  : '',
+    ].filter(Boolean).join(' / ') || r.size || '—';
+
+    return `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td>${size}</td>
+      <td>${r.colour || ''}</td>
+      <td>${r.brand  || ''}</td>
+      <td>${r.micron || ''}</td>
+      <td style="text-align:center">${r.totalCarton || ''}</td>
+      <td style="text-align:center">${r.perCtnQty  || ''}</td>
+      <td style="text-align:center;font-weight:700">${r.totalQty || ''}</td>
+      <td style="text-align:right">${(r.rate  || 0).toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700">${(r.total || 0).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+
+  const total    = bill.grandTotal || 0;
+  const ctnCount = bill.totalCartonCount || 0;
+
+  const html = `<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<title>Invoice #${bill.billNo || ''}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,sans-serif;font-size:11px;color:#000;padding:20px 24px;background:#fff}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;
+    padding-bottom:10px;border-bottom:2.5px solid #111;margin-bottom:12px}
+  .co-row{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .co-name{font-size:17px;font-weight:900}
+  .co-sub{font-size:9.5px;color:#555;line-height:1.7}
+  .inv-lbl{font-size:21px;font-weight:900;letter-spacing:2px}
+  .meta{display:flex;margin-bottom:12px;border:1px solid #ccc;border-radius:4px;overflow:hidden}
+  .mc{flex:1;padding:7px 11px;border-right:1px solid #ddd}
+  .mc:last-child{border-right:none}
+  .ml{font-size:7.5px;text-transform:uppercase;color:#aaa;letter-spacing:.5px;margin-bottom:2px}
+  .mv{font-size:12px;font-weight:700}
+  table{width:100%;border-collapse:collapse;margin-bottom:12px}
+  thead tr{background:#111;color:#fff}
+  th{padding:7px 6px;font-size:8px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  td{padding:6px 6px;border-bottom:1px solid #ebebeb;font-size:10.5px;vertical-align:middle}
+  tbody tr:nth-child(even) td{background:#f8f8f8}
+  tbody tr:last-child td{border-bottom:1.5px solid #bbb}
+  .foot{display:grid;grid-template-columns:1fr 0.65fr 0.85fr;gap:10px;margin-bottom:0}
+  .fbox{border:1px solid #ccc;border-radius:4px;padding:9px 11px}
+  .flbl{font-size:7.5px;text-transform:uppercase;color:#aaa;letter-spacing:.5px;margin-bottom:4px}
+  .fval{font-size:10.5px;font-weight:600;line-height:1.5}
+  .fval-big{font-size:18px;font-weight:900}
+  .ftotal{border:2px solid #111;border-radius:4px;padding:9px 14px;
+    display:flex;justify-content:space-between;align-items:center}
+  .ftlbl{font-size:9px;font-weight:600;text-transform:uppercase;color:#555}
+  .ftval{font-size:22px;font-weight:900}
+  .sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;margin-top:60px}
+  .sig{border-top:1px solid #111;padding-top:8px;font-size:10px;font-weight:600;color:#444}
+  @media print{body{padding:14px 18px}@page{margin:8mm;size:A4}}
+</style>
+</head><body>
+
+<div class="hdr">
+  <div>
+    <div class="co-row"><span class="co-name">HS Packages</span></div>
+    <div class="co-sub">${ADDR}<br/>${PHONE}</div>
+  </div>
+  <div class="inv-lbl">INVOICE</div>
+</div>
+
+<div class="meta">
+  <div class="mc"><div class="ml">Bill No</div><div class="mv">${bill.billNo || '—'}</div></div>
+  <div class="mc"><div class="ml">Buyer Name</div><div class="mv">${bill.partyName || '—'}</div></div>
+  <div class="mc"><div class="ml">Date</div><div class="mv">${bill.date || '—'}</div></div>
+</div>
+
+<table>
+  <thead><tr>
+    <th style="width:22px;text-align:center">#</th>
+    <th>Size</th><th>Colour</th><th>Brand</th><th>MIC</th>
+    <th style="text-align:center">Total CTN</th>
+    <th style="text-align:center">Per CTN</th>
+    <th style="text-align:center">Total Qty</th>
+    <th style="text-align:right">Rate</th>
+    <th style="text-align:right">Total</th>
+  </tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+
+<div class="foot">
+  <div class="fbox">
+    <div class="flbl">Amount in Words</div>
+    <div class="fval">${toWords(total)}</div>
+  </div>
+  <div class="fbox">
+    <div class="flbl">Total Cartons</div>
+    <div class="fval fval-big">${ctnCount} <span style="font-size:11px;font-weight:600;color:#666">CTN</span></div>
+  </div>
+  <div class="ftotal">
+    <div class="ftlbl">Grand Total</div>
+    <div class="ftval">${total.toLocaleString()}</div>
+  </div>
+</div>
+
+<div class="sigs">
+  <div class="sig">Authorised</div>
+  <div class="sig">Receiver Name</div>
+  <div class="sig">Vehical No</div>
+</div>
+
+<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=1000,height=750');
+  w.document.write(html);
+  w.document.close();
+};
+
+// ── Component ─────────────────────────────────────────────
+const emptyItem = {
+  sizeMm:'', sizeInch:'', yards:'',
+  colour:'', brand:'', micron:'',
+  totalCarton:'', perCtnQty:'', rate:''
+};
+
+const SavedBills = () => {
+  const { bills, updateBill, deleteBill } = useAccounts();
+
+  const [editId,      setEditId]      = useState(null);
+  const [editData,    setEditData]    = useState(null);
+  const [filterType,  setFilterType]  = useState('All');
+  const [search,      setSearch]      = useState('');
+  const [addingItem,  setAddingItem]  = useState(false);
+  const [newItemForm, setNewItemForm] = useState(emptyItem);
+
+  // ── Filter ────────────────────────────────────────────
+  const filtered = bills.filter(b =>
+    (filterType === 'All' || b.billType === filterType) &&
+    (search === '' ||
+      b.partyName?.toLowerCase().includes(search.toLowerCase()) ||
+      String(b.billNo || '').includes(search))
+  );
+
+  // ── Edit helpers ──────────────────────────────────────
+  const startEdit = (bill) => {
+    setEditId(bill._id || bill.id);
+    setEditData({ ...bill, items: (bill.items || []).map(i => ({ ...i })) });
+    setAddingItem(false);
+  };
+  const cancelEdit = () => { setEditId(null); setEditData(null); setAddingItem(false); };
+
+  const saveEdit = () => {
+    const grandTotal = (editData.items || []).reduce((s, i) => {
+      if (editData.billType === 'Sale') {
+        return s + (parseFloat(i.totalCarton)||0) * (parseFloat(i.perCtnQty)||0) * (parseFloat(i.rate)||0);
+      }
+      return s + (parseFloat(i.qty)||0) * (parseFloat(i.rate)||0);
+    }, 0);
+    const totalCartonCount = (editData.items || []).reduce((s, i) => s + (parseFloat(i.totalCarton)||0), 0);
+    updateBill(editId, { ...editData, grandTotal, totalCartonCount });
+    cancelEdit();
+  };
+
+  const updateEditItem = (idx, key, val) => {
+    setEditData(prev => {
+      const items = [...prev.items];
+      items[idx] = { ...items[idx], [key]: val };
+      return { ...prev, items };
+    });
+  };
+
+  const removeEditItem = (idx) => {
+    setEditData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const addNewItem = () => {
+    if (!newItemForm.rate) return;
+    const totalQty = (parseFloat(newItemForm.totalCarton)||0) * (parseFloat(newItemForm.perCtnQty)||0);
+    const total    = totalQty * (parseFloat(newItemForm.rate)||0);
+    const sizeLabel = [
+      newItemForm.sizeMm    ? `${newItemForm.sizeMm}mm`  : '',
+      newItemForm.sizeInch  ? `${newItemForm.sizeInch}`  : '',
+      newItemForm.yards     ? `${newItemForm.yards}yds`  : '',
+    ].filter(Boolean).join(' / ');
+    setEditData(prev => ({
+      ...prev,
+      items: [...prev.items, { ...newItemForm, id: Date.now(), sizeLabel, totalQty, total }]
+    }));
+    setNewItemForm(emptyItem);
+    setAddingItem(false);
+  };
+
+  const liveTotal = (data) =>
+    (data.items || []).reduce((s, i) =>
+      s + (data.billType === 'Sale'
+        ? (parseFloat(i.totalCarton)||0) * (parseFloat(i.perCtnQty)||0) * (parseFloat(i.rate)||0)
+        : (parseFloat(i.qty)||0) * (parseFloat(i.rate)||0)
+      ), 0);
+
+  const getBillKey = (b) => b._id || b.id;
+
+  // ── Render ─────────────────────────────────────────────
+  return (
+    <div className="text-white min-h-screen">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <FileText className="text-[#22c55e]" size={24}/>
+        <div>
+          <h1 className="text-2xl font-black">SAVED <span className="text-[#22c55e]">BILLS</span></h1>
+          <p className="text-gray-500 text-xs mt-0.5">Sab bills ek jagah</p>
+        </div>
+      </div>
+
+      {/* Search + Filter */}
+      <div className="flex flex-wrap gap-3 mb-5">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={15}/>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Party name ya bill # se search..."
+            className="w-full pl-9 p-2.5 bg-white/[0.03] rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]/40 text-sm"
+          />
+        </div>
+        <div className="flex gap-2">
+          {['All','Sale','Purchase'].map(t => (
+            <button key={t} onClick={() => setFilterType(t)}
+              className={`px-4 py-2.5 rounded-xl font-bold text-sm border transition ${
+                filterType === t
+                  ? 'bg-[#22c55e] text-black border-[#22c55e]'
+                  : 'bg-white/[0.03] text-gray-400 border-[#22c55e]/20 hover:border-[#22c55e]/50'
+              }`}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      {bills.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          {[
+            { label:'Total Bills',    value: bills.length },
+            { label:'Sale Bills',     value: bills.filter(b=>b.billType==='Sale').length },
+            { label:'Purchase Bills', value: bills.filter(b=>b.billType==='Purchase').length },
+            { label:'Sale Revenue',   value: bills.filter(b=>b.billType==='Sale').reduce((s,b)=>s+(b.grandTotal||0),0).toLocaleString() },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-white/[0.03] border border-[#22c55e]/10 rounded-2xl p-4">
+              <p className="text-[10px] text-gray-500 uppercase font-bold">{label}</p>
+              <p className="text-xl font-black text-[#22c55e] mt-1">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bills list */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 text-gray-500">
+          <FileText size={40} className="mx-auto mb-3 opacity-20"/>
+          <p>Koi bill nahi mila.</p>
+          <p className="text-xs mt-1 text-gray-600">Sale ya Purchase invoice bana kar Save Bill dabao.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filtered.map(bill => {
+            const key       = getBillKey(bill);
+            const isEditing = editId === key;
+            const curItems  = isEditing ? editData.items : (bill.items || []);
+            const curTotal  = isEditing ? liveTotal(editData) : (bill.grandTotal || 0);
+
+            return (
+              <div key={key}
+                className={`bg-white/[0.03] rounded-2xl border overflow-hidden transition ${
+                  isEditing ? 'border-[#22c55e]/50' : 'border-white/10 hover:border-white/20'
+                }`}>
+
+                {/* ── Bill header ── */}
+                <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-white/5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Type badge */}
+                    <span className={`text-xs font-black px-3 py-1 rounded-full shrink-0 ${
+                      bill.billType === 'Sale'
+                        ? 'bg-[#22c55e]/10 text-[#22c55e]'
+                        : 'bg-blue-500/10 text-blue-400'
+                    }`}>
+                      {bill.billType}
+                    </span>
+
+                    {isEditing ? (
+                      /* Edit mode header fields */
+                      <div className="flex flex-wrap gap-3">
+                        {[
+                          { label:'Bill #', key:'billNo',    w:'w-24' },
+                          { label:'Party',  key:'partyName', w:'w-36' },
+                          { label:'Date',   key:'date',      w:'w-28' },
+                        ].map(({ label, key: k, w }) => (
+                          <div key={k}>
+                            <p className="text-[9px] text-gray-500 uppercase mb-0.5">{label}</p>
+                            <input
+                              value={editData[k] || ''}
+                              onChange={e => setEditData(p => ({ ...p, [k]: e.target.value }))}
+                              className={`bg-black/30 p-1.5 rounded-lg border border-[#22c55e]/30 outline-none text-sm ${w}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-black text-sm">
+                          {bill.partyName}
+                          <span className="text-gray-500 font-normal text-xs ml-2">#{bill.billNo}</span>
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">{bill.date}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-black text-[#22c55e] mr-1">{curTotal.toLocaleString()}</p>
+
+                    {/* ✅ Print button — har bill ka apna */}
+                    {!isEditing && bill.billType === 'Sale' && (
+                      <button
+                        onClick={() => printBill(bill)}
+                        title="Print / Save PDF"
+                        className="text-gray-400 hover:text-[#22c55e] transition p-1.5 rounded-lg hover:bg-[#22c55e]/10"
+                      >
+                        <Printer size={15}/>
+                      </button>
+                    )}
+
+                    {isEditing ? (
+                      <>
+                        <button onClick={saveEdit} className="text-[#22c55e] hover:text-white transition p-1.5 rounded-lg hover:bg-[#22c55e]/10">
+                          <Check size={16}/>
+                        </button>
+                        <button onClick={cancelEdit} className="text-gray-400 hover:text-red-500 transition p-1.5 rounded-lg hover:bg-red-500/10">
+                          <X size={16}/>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => startEdit(bill)} className="text-gray-400 hover:text-[#22c55e] transition p-1.5 rounded-lg hover:bg-[#22c55e]/10">
+                          <Pencil size={15}/>
+                        </button>
+                        <button
+                          onClick={() => { if (window.confirm('Bill permanently delete karna hai?')) deleteBill(key); }}
+                          className="text-gray-400 hover:text-red-500 transition p-1.5 rounded-lg hover:bg-red-500/10"
+                        >
+                          <Trash2 size={15}/>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Items table ── */}
+                <div className="overflow-x-auto">
+                  {bill.billType === 'Sale' ? (
+                    <table className="w-full text-left text-xs min-w-[700px]">
+                      <thead className="bg-black/20 text-gray-500 uppercase">
+                        <tr>
+                          <th className="p-2.5">#</th>
+                          <th className="p-2.5">Size</th>
+                          <th className="p-2.5">Colour</th>
+                          <th className="p-2.5">Brand</th>
+                          <th className="p-2.5">MIC</th>
+                          <th className="p-2.5 text-center">Total CTN</th>
+                          <th className="p-2.5 text-center">Per CTN</th>
+                          <th className="p-2.5 text-center">Total Qty</th>
+                          <th className="p-2.5 text-right">Rate</th>
+                          <th className="p-2.5 text-right">Total</th>
+                          {isEditing && <th className="p-2.5 w-8"></th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {curItems.map((item, idx) => {
+                          const sizeDisplay = item.sizeLabel || [
+                            item.sizeMm   ? `${item.sizeMm}mm`  : '',
+                            item.sizeInch ? `${item.sizeInch}`  : '',
+                            item.yards    ? `${item.yards}yds`  : '',
+                          ].filter(Boolean).join(' / ') || item.size || '—';
+
+                          return (
+                            <tr key={item.id || idx} className="border-t border-white/5 hover:bg-white/[0.02]">
+                              <td className="p-2.5 text-gray-500">{idx+1}</td>
+
+                              {isEditing ? (
+                                <>
+                                  {/* Size mm */}
+                                  <td className="p-1.5">
+                                    <div className="flex gap-1">
+                                      <input value={item.sizeMm||''}
+                                        onChange={e=>updateEditItem(idx,'sizeMm',e.target.value)}
+                                        placeholder="mm"
+                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
+                                      <input value={item.sizeInch||''}
+                                        onChange={e=>updateEditItem(idx,'sizeInch',e.target.value)}
+                                        placeholder="inch"
+                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
+                                    </div>
+                                  </td>
+                                  {['colour','brand','micron'].map(k=>(
+                                    <td key={k} className="p-1.5">
+                                      <input value={item[k]||''}
+                                        onChange={e=>updateEditItem(idx,k,e.target.value)}
+                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-full text-xs"/>
+                                    </td>
+                                  ))}
+                                  {['totalCarton','perCtnQty'].map(k=>(
+                                    <td key={k} className="p-1.5 text-center">
+                                      <input type="number" value={item[k]||''}
+                                        onChange={e=>updateEditItem(idx,k,e.target.value)}
+                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-center text-xs"/>
+                                    </td>
+                                  ))}
+                                  <td className="p-1.5 text-center text-[#22c55e] font-bold">
+                                    {(parseFloat(item.totalCarton)||0)*(parseFloat(item.perCtnQty)||0)}
+                                  </td>
+                                  <td className="p-1.5 text-right">
+                                    <input type="number" value={item.rate||''}
+                                      onChange={e=>updateEditItem(idx,'rate',e.target.value)}
+                                      className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-20 text-right text-xs"/>
+                                  </td>
+                                  <td className="p-1.5 text-right font-bold">
+                                    {((parseFloat(item.totalCarton)||0)*(parseFloat(item.perCtnQty)||0)*(parseFloat(item.rate)||0)).toLocaleString()}
+                                  </td>
+                                  <td className="p-1.5">
+                                    <button onClick={()=>removeEditItem(idx)} className="text-gray-400 hover:text-red-500">
+                                      <Trash2 size={12}/>
+                                    </button>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="p-2.5 font-mono">{sizeDisplay}</td>
+                                  <td className="p-2.5">{item.colour}</td>
+                                  <td className="p-2.5">{item.brand}</td>
+                                  <td className="p-2.5">{item.micron}</td>
+                                  <td className="p-2.5 text-center">{item.totalCarton}</td>
+                                  <td className="p-2.5 text-center">{item.perCtnQty}</td>
+                                  <td className="p-2.5 text-center text-[#22c55e] font-bold">{item.totalQty}</td>
+                                  <td className="p-2.5 text-right">{(item.rate||0).toLocaleString()}</td>
+                                  <td className="p-2.5 text-right font-bold">{(item.total||0).toLocaleString()}</td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+
+                        {/* Add new item row in edit mode */}
+                        {isEditing && (
+                          addingItem ? (
+                            <tr className="border-t border-[#22c55e]/20 bg-[#22c55e]/5">
+                              <td className="p-1.5 text-gray-500 text-xs">new</td>
+                              <td className="p-1.5">
+                                <div className="flex gap-1">
+                                  <input value={newItemForm.sizeMm||''}
+                                    onChange={e=>setNewItemForm(p=>({...p,sizeMm:e.target.value}))}
+                                    placeholder="mm"
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
+                                  <input value={newItemForm.sizeInch||''}
+                                    onChange={e=>setNewItemForm(p=>({...p,sizeInch:e.target.value}))}
+                                    placeholder="inch"
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
+                                </div>
+                              </td>
+                              {['colour','brand','micron','totalCarton','perCtnQty'].map(k=>(
+                                <td key={k} className="p-1.5">
+                                  <input value={newItemForm[k]||''}
+                                    onChange={e=>setNewItemForm(p=>({...p,[k]:e.target.value}))}
+                                    placeholder={k} type={['totalCarton','perCtnQty'].includes(k)?'number':'text'}
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-full text-xs"/>
+                                </td>
+                              ))}
+                              <td className="p-1.5 text-center text-gray-500 text-xs">—</td>
+                              <td className="p-1.5">
+                                <input type="number" value={newItemForm.rate||''}
+                                  onChange={e=>setNewItemForm(p=>({...p,rate:e.target.value}))}
+                                  placeholder="Rate"
+                                  className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-20 text-xs"/>
+                              </td>
+                              <td className="p-1.5 text-center text-gray-500 text-xs">—</td>
+                              <td className="p-1.5">
+                                <div className="flex gap-1">
+                                  <button onClick={addNewItem} className="text-[#22c55e] hover:text-white"><Check size={12}/></button>
+                                  <button onClick={()=>setAddingItem(false)} className="text-gray-400 hover:text-red-500"><X size={12}/></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            <tr className="border-t border-white/5">
+                              <td colSpan={11} className="p-2">
+                                <button onClick={()=>setAddingItem(true)}
+                                  className="text-xs text-[#22c55e] flex items-center gap-1 hover:text-white transition">
+                                  <Plus size={12}/> Add Item
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    /* Purchase bill items */
+                    <table className="w-full text-left text-xs min-w-[500px]">
+                      <thead className="bg-black/20 text-gray-500 uppercase">
+                        <tr>
+                          <th className="p-2.5">Category</th>
+                          <th className="p-2.5">Specs</th>
+                          <th className="p-2.5">Qty</th>
+                          <th className="p-2.5">Rate</th>
+                          <th className="p-2.5 text-right">Amount</th>
+                          {isEditing && <th className="p-2.5 w-8"></th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {curItems.map((item, idx) => (
+                          <tr key={item.id||idx} className="border-t border-white/5 hover:bg-white/[0.02]">
+                            {isEditing ? (
+                              <>
+                                <td className="p-1.5 text-gray-400 text-xs">{item.mainCategory}</td>
+                                <td className="p-1.5 font-mono text-gray-300 text-xs">{item.specsLabel}</td>
+                                <td className="p-1.5">
+                                  <input type="number" value={item.qty||''}
+                                    onChange={e=>updateEditItem(idx,'qty',e.target.value)}
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
+                                </td>
+                                <td className="p-1.5">
+                                  <input type="number" value={item.rate||''}
+                                    onChange={e=>updateEditItem(idx,'rate',e.target.value)}
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-20 text-xs"/>
+                                </td>
+                                <td className="p-1.5 text-right font-bold text-xs">
+                                  {((parseFloat(item.qty)||0)*(parseFloat(item.rate)||0)).toLocaleString()}
+                                </td>
+                                <td className="p-1.5">
+                                  <button onClick={()=>removeEditItem(idx)} className="text-gray-400 hover:text-red-500"><Trash2 size={12}/></button>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="p-2.5 text-[#22c55e]">{item.mainCategory}</td>
+                                <td className="p-2.5 font-mono text-gray-300">{item.specsLabel}</td>
+                                <td className="p-2.5">{item.qty}</td>
+                                <td className="p-2.5">{item.rate}</td>
+                                <td className="p-2.5 text-right font-bold">{(item.amount||0).toLocaleString()}</td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* ── Bill footer ── */}
+                <div className="p-3 flex flex-wrap justify-between items-center gap-2 border-t border-white/5 bg-black/10">
+                  <p className="text-xs text-gray-500 capitalize">{toWords(curTotal)}</p>
+                  <p className="font-black text-[#22c55e]">{curTotal.toLocaleString()}</p>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SavedBills;
