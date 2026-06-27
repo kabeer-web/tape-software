@@ -1,8 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useContext } from 'react';
-import {
-  getInventory, addInventory,
-  updateInventory, deleteInventory
-} from '../../api';
+import { getInventory, addInventory, updateInventory, deleteInventory } from '../../api';
 
 export const StockContext = createContext();
 
@@ -12,140 +9,87 @@ export const useStock = () => {
   return ctx;
 };
 
-const JAMBO_CATS = [
-  'Clear','Tan','Cloth','Masking','Tissue',
-  'SuperYellow','SuperClear','Color','Foam'
-];
+const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
 
 export const StockProvider = ({ children }) => {
   const [inventory, setInventory] = useState([]);
   const [loading,   setLoading]   = useState(true);
 
-  // ── Fetch all inventory from Supabase ────────────────────
+  // Fetch logic
   const refreshInventory = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getInventory();
-      setInventory(data);
-    } catch (err) {
-      console.error('refreshInventory error:', err);
-    } finally {
-      setLoading(false);
-    }
+      // Ensure each item has both _id and id for compatibility
+      const normalized = data.map(item => ({ ...item, _id: item.id }));
+      setInventory(normalized);
+    } catch (err) { console.error('refreshInventory error:', err); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { refreshInventory(); }, [refreshInventory]);
 
-  // ── Auto generate next Jambo roll number ─────────────────
   const generateRollNo = (currentInv) => {
     const jambos = currentInv.filter(i => JAMBO_CATS.includes(i.category));
     if (!jambos.length) return '001';
-    const nums = jambos
-      .map(i => parseInt(i.rollNo || i.roll_no || '0', 10))
-      .filter(n => !isNaN(n));
+    const nums = jambos.map(i => parseInt(i.rollNo || i.roll_no || '0', 10)).filter(n => !isNaN(n));
     const max = nums.length ? Math.max(...nums) : 0;
     return String(max + 1).padStart(3, '0');
   };
 
-  // ── Add roll / item ──────────────────────────────────────
   const addRoll = async (item) => {
     const isJambo = JAMBO_CATS.includes(item.category);
-    const payload = {
-      ...item,
-      date: item.date || new Date().toLocaleDateString('en-GB'),
-    };
-    // Auto roll number for Jambo
+    const payload = { ...item, date: item.date || new Date().toLocaleDateString('en-GB') };
     if (isJambo && !payload.rollNo && !payload.roll_no) {
       payload.rollNo = generateRollNo(inventory);
     }
     const saved = await addInventory(payload);
-    setInventory(prev => [saved, ...prev]);
-    return saved;
+    const withId = { ...saved, _id: saved.id };
+    setInventory(prev => [withId, ...prev]);
+    return withId;
   };
 
-  // ── Adjust stock by delta (used by Production) ───────────
-  // field = 'yards' or 'qty', delta = positive or negative number
   const adjustStock = async (item, field, delta) => {
-    if (!item) { console.warn('adjustStock: no item'); return; }
-    const itemId = item._id || item.id;
-    if (!itemId) { console.warn('adjustStock: no id', item); return; }
-
-    // Get latest value from live state (not stale snapshot)
-    const live = inventory.find(i => i._id === itemId || i.id === itemId);
+    if (!item) return;
+    const itemId = item.id || item._id;
+    const live = inventory.find(i => i.id === itemId || i._id === itemId);
     const currentVal = Number(live ? (live[field] || 0) : (item[field] || 0));
     const newVal = parseFloat((currentVal + delta).toFixed(4));
-
     try {
       if (newVal <= 0) {
         await deleteInventory(itemId);
-        setInventory(prev => prev.filter(i => i._id !== itemId && i.id !== itemId));
+        setInventory(prev => prev.filter(i => i.id !== itemId && i._id !== itemId));
       } else {
         const updated = await updateInventory(itemId, { [field]: newVal });
-        setInventory(prev => prev.map(i =>
-          (i._id === itemId || i.id === itemId) ? { ...i, ...updated } : i
-        ));
+        setInventory(prev => prev.map(i => (i.id === itemId || i._id === itemId) ? { ...i, ...updated, _id: itemId } : i));
       }
-    } catch (err) {
-      console.error('adjustStock failed:', err);
-      throw err;
-    }
+    } catch (err) { throw err; }
   };
 
-  // ── Helpers for Jambo files (issue yards) ────────────────
   const issueYards = async (id, qty) => {
-    const item = inventory.find(i => i._id === id);
-    if (!item) return;
-    const newYards = parseFloat(((Number(item.yards) || 0) - qty).toFixed(4));
-    if (newYards <= 0) {
-      await deleteInventory(id);
-      setInventory(prev => prev.filter(i => i._id !== id));
-    } else {
-      const updated = await updateInventory(id, { yards: newYards });
-      setInventory(prev => prev.map(i => i._id === id ? { ...i, ...updated } : i));
-    }
+    const item = inventory.find(i => i.id === id || i._id === id);
+    if (item) await adjustStock(item, 'yards', -qty);
   };
 
-  // ── Set yards directly (for edit) ───────────────────────
   const editItemYards = async (id, newYards) => {
     const updated = await updateInventory(id, { yards: Number(newYards) });
-    setInventory(prev => prev.map(i => i._id === id ? { ...i, ...updated } : i));
+    setInventory(prev => prev.map(i => (i.id === id || i._id === id) ? { ...i, ...updated } : i));
   };
 
-  // ── Update Core/Carton qty by delta ─────────────────────
   const updateStock = async (id, delta) => {
-    const item = inventory.find(i => i._id === id);
-    if (!item) return;
-    const newQty = Math.max(0, (Number(item.qty) || 0) + delta);
-    if (newQty <= 0) {
-      await deleteInventory(id);
-      setInventory(prev => prev.filter(i => i._id !== id));
-    } else {
-      const updated = await updateInventory(id, { qty: newQty });
-      setInventory(prev => prev.map(i => i._id === id ? { ...i, ...updated } : i));
-    }
+    const item = inventory.find(i => i.id === id || i._id === id);
+    if (item) await adjustStock(item, 'qty', delta);
   };
 
-  // ── Remove item ─────────────────────────────────────────
   const removeItem = async (id) => {
     await deleteInventory(id);
-    setInventory(prev => prev.filter(i => i._id !== id));
+    setInventory(prev => prev.filter(i => i.id !== id && i._id !== id));
   };
 
   return (
     <StockContext.Provider value={{
-      inventory,
-      loading,
-      // Production
-      adjustStock,
-      refreshInventory,
-      // Jambo files
-      addRoll,
-      issueYards,
-      editItemYards,
-      // Core/Carton files
-      updateStock,
-      removeItem,
-      setInventory,
+      inventory, loading, adjustStock, refreshInventory,
+      addRoll, issueYards, editItemYards, updateStock, removeItem, setInventory,
     }}>
       {children}
     </StockContext.Provider>
