@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# .gitignore file mein ye line honi chahiye
+.env
+.env.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
