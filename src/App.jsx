@@ -36,7 +36,7 @@ import Jhonson from './Components/inventory/CORE BRANDS/jhonson';
 
 // Billing & Accounts
 import SaleInvoice from './Components/inventory/BILL/SaleInvoice';
-import PurchaseInvoice from './Components/inventory/BILL/purchaseinvoice';
+import PurchaseInvoice from './Components/inventory/BILL/PurchaseInvoice';
 import SavedBills from './Components/inventory/BILL/SavedBills';
 import Ledger from './Components/inventory/ACCOUNTS/Ledger';
 
