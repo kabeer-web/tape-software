@@ -1,56 +1,79 @@
 import { supabase } from './supabase';
 
-export const addInventory = async (item) => {
-  // Database columns ke mutabiq map karna
-  const payload = {
-    ...item,
-    roll_no: item.rollNo, // Frontend se backend mapping
-    carton_type: item.cartonType
-  };
-  delete payload.rollNo;
-  delete payload.cartonType;
+// ═══════════════════════════════════════
+// INVENTORY
+// ═══════════════════════════════════════
 
+export const getInventory = async () => {
   const { data, error } = await supabase
-    .from('inventory').insert([payload]).select().single();
+    .from('inventory').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
-  return { ...data, _id: data.id, rollNo: data.roll_no };
-};
-
-
-export const updateInventory = async (id, updates) => {
-  // Updates mein bhi mapping check karein
-  const payload = { ...updates };
-  if (updates.rollNo) { payload.roll_no = updates.rollNo; delete payload.rollNo; }
-
-  const { data, error } = await supabase
-    .from('inventory').update(payload).eq('id', id).select().single();
-  if (error) throw new Error(error.message);
-  return { ...data, _id: data.id, rollNo: data.roll_no };
+  return (data || []).map(row => ({
+    ...row,
+    _id:        row.id,
+    rollNo:     row.roll_no,
+    cartonType: row.carton_type,
+  }));
 };
 
 export const getInventoryByRoll = async (rollNo) => {
   const trimmed = String(rollNo).trim();
-  const { data, error } = await supabase
-    .from('inventory')
-    .select('*')
-    .eq('roll_no', trimmed)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? { ...data, _id: data.id, rollNo: data.roll_no } : null;
+  const padded  = trimmed.padStart(3, '0');
+  const stripped = trimmed.replace(/^0+/, '') || '0';
+
+  // Try exact match
+  const { data: d1 } = await supabase.from('inventory').select('*').eq('roll_no', trimmed).maybeSingle();
+  if (d1) return { ...d1, _id: d1.id, rollNo: d1.roll_no };
+
+  // Try padded
+  const { data: d2 } = await supabase.from('inventory').select('*').eq('roll_no', padded).maybeSingle();
+  if (d2) return { ...d2, _id: d2.id, rollNo: d2.roll_no };
+
+  // Try all jambo rolls and match by stripping zeros
+  const { data: all } = await supabase.from('inventory').select('*')
+    .not('category', 'in', '("Core","Carton")');
+  const found = (all || []).find(i =>
+    (String(i.roll_no || '').replace(/^0+/, '') || '0') === stripped
+  );
+  if (found) return { ...found, _id: found.id, rollNo: found.roll_no };
+  return null;
 };
 
 export const addInventory = async (item) => {
+  const payload = {
+    category:    item.category    || null,
+    type:        item.type        || item.category || null,
+    date:        item.date        || null,
+    roll_no:     item.rollNo      || item.roll_no  || null,
+    yards:       item.yards       ? Number(item.yards) : 0,
+    micron:      item.micron      || null,
+    width:       item.width       || null,
+    color:       item.color       || null,
+    brand:       item.brand       || null,
+    side:        item.side        || null,
+    ply:         item.ply         || null,
+    qty:         item.qty         ? Number(item.qty) : 0,
+    carton_type: item.cartonType  || item.carton_type || null,
+    size:        item.size        || null,
+  };
   const { data, error } = await supabase
-    .from('inventory').insert([item]).select().single();
+    .from('inventory').insert([payload]).select().single();
   if (error) throw new Error(error.message);
-  return { ...data, _id: data.id };
+  return { ...data, _id: data.id, rollNo: data.roll_no, cartonType: data.carton_type };
 };
 
 export const updateInventory = async (id, updates) => {
+  const allowed = {};
+  if (updates.yards  !== undefined) allowed.yards  = Number(updates.yards);
+  if (updates.qty    !== undefined) allowed.qty    = Number(updates.qty);
+  if (updates.color  !== undefined) allowed.color  = updates.color;
+  if (updates.micron !== undefined) allowed.micron = updates.micron;
+  if (updates.width  !== undefined) allowed.width  = updates.width;
+
   const { data, error } = await supabase
-    .from('inventory').update(updates).eq('id', id).select().single();
+    .from('inventory').update(allowed).eq('id', id).select().single();
   if (error) throw new Error(error.message);
-  return { ...data, _id: data.id };
+  return { ...data, _id: data.id, rollNo: data.roll_no, cartonType: data.carton_type };
 };
 
 export const deleteInventory = async (id) => {
@@ -59,31 +82,63 @@ export const deleteInventory = async (id) => {
   return true;
 };
 
-// ─── BILLS ──────────────────────────────────────────────
+// ═══════════════════════════════════════
+// BILLS
+// ═══════════════════════════════════════
+
 export const getBills = async () => {
   const { data, error } = await supabase
     .from('bills').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map(b => ({
     ...b,
-    _id: b.id,
-    billNo: b.bill_no,
-    partyName: b.party_name,
+    _id:              b.id,
+    billNo:           b.bill_no,
+    partyName:        b.party_name,
+    grandTotal:       b.grand_total,
+    billType:         b.bill_type,
+    totalCartonCount: b.total_carton_count,
+    cartonUsed:       b.carton_used,
   }));
 };
 
 export const addBill = async (bill) => {
-  const { data, error } = await supabase.from('bills').insert([bill]).select().single();
+  const { data, error } = await supabase.from('bills').insert([{
+    bill_type:          bill.billType         || 'Sale',
+    bill_no:            bill.billNo           || '',
+    party_name:         bill.partyName        || '',
+    date:               bill.date             || '',
+    grand_total:        bill.grandTotal       || 0,
+    items:              bill.items            || [],
+    total_carton_count: bill.totalCartonCount || 0,
+    carton_used:        bill.cartonUsed       || null,
+    logo:               bill.logo             || null,
+  }]).select().single();
   if (error) throw new Error(error.message);
-  return data;
+  return {
+    ...data, _id: data.id,
+    billNo: data.bill_no, partyName: data.party_name,
+    grandTotal: data.grand_total, billType: data.bill_type,
+    totalCartonCount: data.total_carton_count,
+  };
 };
 
-// --- YE FUNCTION MISSING THA ---
 export const updateBill = async (id, bill) => {
-  const { data, error } = await supabase
-    .from('bills').update(bill).eq('id', id).select().single();
+  const { data, error } = await supabase.from('bills').update({
+    bill_no:            bill.billNo,
+    party_name:         bill.partyName,
+    date:               bill.date,
+    grand_total:        bill.grandTotal       || 0,
+    items:              bill.items            || [],
+    total_carton_count: bill.totalCartonCount || 0,
+  }).eq('id', id).select().single();
   if (error) throw new Error(error.message);
-  return data;
+  return {
+    ...data, _id: data.id,
+    billNo: data.bill_no, partyName: data.party_name,
+    grandTotal: data.grand_total, billType: data.bill_type,
+    totalCartonCount: data.total_carton_count,
+  };
 };
 
 export const deleteBill = async (id) => {
@@ -92,21 +147,27 @@ export const deleteBill = async (id) => {
   return true;
 };
 
-// ─── PARTIES ────────────────────────────────────────────
+// ═══════════════════════════════════════
+// PARTIES
+// ═══════════════════════════════════════
+
 export const getParties = async () => {
-  const { data, error } = await supabase.from('parties').select('*').order('name', { ascending: true });
+  const { data, error } = await supabase
+    .from('parties').select('*').order('name', { ascending: true });
   if (error) throw new Error(error.message);
   return (data || []).map(p => ({ ...p, _id: p.id }));
 };
 
 export const addParty = async (party) => {
-  const { data, error } = await supabase.from('parties').insert([party]).select().single();
+  const { data, error } = await supabase
+    .from('parties').insert([party]).select().single();
   if (error) throw new Error(error.message);
   return { ...data, _id: data.id };
 };
 
-export const updateParty = async (id, updates) => {
-  const { data, error } = await supabase.from('parties').update(updates).eq('id', id).select().single();
+export const updateParty = async (id, party) => {
+  const { data, error } = await supabase
+    .from('parties').update(party).eq('id', id).select().single();
   if (error) throw new Error(error.message);
   return { ...data, _id: data.id };
 };
@@ -117,23 +178,29 @@ export const deleteParty = async (id) => {
   return true;
 };
 
-// ─── PRODUCTIONS ────────────────────────────────────────
+// ═══════════════════════════════════════
+// PRODUCTIONS
+// ═══════════════════════════════════════
+
 export const getProductions = async () => {
-  const { data, error } = await supabase.from('productions').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('productions').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map(p => ({ ...p, _id: p.id }));
 };
 
 export const addProduction = async (prod) => {
-  const { data, error } = await supabase.from('productions').insert([prod]).select().single();
+  const { _id, id, created_at, ...rest } = prod;
+  const { data, error } = await supabase
+    .from('productions').insert([rest]).select().single();
   if (error) throw new Error(error.message);
   return { ...data, _id: data.id };
 };
 
-// --- YE FUNCTIONS MISSING THAY ---
 export const updateProduction = async (id, prod) => {
+  const { _id, id: _i, created_at, ...rest } = prod;
   const { data, error } = await supabase
-    .from('productions').update(prod).eq('id', id).select().single();
+    .from('productions').update(rest).eq('id', id).select().single();
   if (error) throw new Error(error.message);
   return { ...data, _id: data.id };
 };
