@@ -5,7 +5,7 @@ import {
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext } from '../StockContext';
 
-// ── NUMBERS TO WORDS (Wahi Logic) ────────────────────────
+// ── NUMBERS TO WORDS LOGIC ────────────────────────
 const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
 const tens  = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
 function numToWords(n) {
@@ -51,63 +51,101 @@ const SelectOrCustom = ({ value, onChange, options, placeholder }) => {
   );
 };
 
-// ── PREMIUM PRINT HTML GENERATOR ────────────────────────────
+// ── PREMIUM CORPORATE PRINT HTML GENERATOR ────────────────────────────
 const generateInvoiceHTML = (bill) => {
     const { billNo, partyName, date, items, grandTotal, totalCartonCount, logo } = bill;
-    const logoImgHtml = logo ? `<img src="${logo}" style="height:65px; object-fit:contain;"/>` : '';
+    const logoImgHtml = logo ? `<img src="${logo}" style="height:70px; width:auto; object-fit:contain;"/>` : '';
+    
     const rowsHtml = (items || []).map((r, i) => `
       <tr>
-        <td style="text-align:center; border:1px solid #000; padding:8px;">${i + 1}</td>
-        <td style="font-weight:bold; border:1px solid #000; padding:8px;">${r.sizeLabel}</td>
-        <td style="border:1px solid #000; padding:8px;">${r.colour || '—'}</td>
-        <td style="border:1px solid #000; padding:8px;">${r.brand || '—'}</td>
-        <td style="text-align:center; border:1px solid #000; padding:8px;">${r.micron || '—'}</td>
-        <td style="text-align:center; border:1px solid #000; padding:8px;">${Number(r.totalCarton)}</td>
-        <td style="text-align:center; border:1px solid #000; padding:8px;">${Number(r.perCtnQty)}</td>
-        <td style="text-align:center; font-weight:bold; background:#f9f9f9; border:1px solid #000; padding:8px;">${Number(r.totalQty)}</td>
-        <td style="text-align:right; border:1px solid #000; padding:8px;">${(r.rate || 0).toLocaleString()}</td>
-        <td style="text-align:right; border:1px solid #000; font-weight:900; padding:8px;">${(r.total || 0).toLocaleString()}</td>
+        <td style="text-align:center;">${String(i + 1).padStart(2, '0')}</td>
+        <td>
+          <div style="font-weight:700; font-size:12px;">${r.sizeLabel}</div>
+          <div style="font-size:10px; color:#666; text-transform:uppercase;">${r.brand || ''} ${r.micron || ''}</div>
+        </td>
+        <td style="text-align:center;">${r.colour || '—'}</td>
+        <td style="text-align:center;">${Number(r.totalCarton)}</td>
+        <td style="text-align:center;">${Number(r.perCtnQty)}</td>
+        <td style="text-align:center; font-weight:700;">${Number(r.totalQty)}</td>
+        <td style="text-align:right;">${Number(r.rate).toLocaleString()}</td>
+        <td style="text-align:right; font-weight:800; color:#111;">${Number(r.total).toLocaleString()}</td>
       </tr>`).join('');
 
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice #${billNo}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box; font-family:'Segoe UI', sans-serif;}
-  body{padding:40px; color:#000; background:#fff; line-height:1.2;}
-  .hdr{display:flex; justify-content:space-between; align-items:center; border-bottom:4px solid #000; padding-bottom:15px; margin-bottom:25px;}
-  .logo-area{display:flex; align-items:center; gap:20px;}
-  .co-name{font-size:28px; font-weight:900; text-transform:uppercase;}
-  .co-info{font-size:10px; color:#333; margin-top:8px;}
-  .meta-grid{display:grid; grid-template-columns:1.5fr 1fr; gap:30px; margin-bottom:25px;}
-  .buyer-box{border:3px solid #000; padding:15px;}
-  .main-table{width:100%; border-collapse:collapse; margin-bottom:25px; border:2px solid #000;}
-  th{background:#000; color:#fff; padding:12px 5px; font-size:9px; text-transform:uppercase; border:1px solid #000;}
-  .total-box{width:320px; border:5px solid #000; padding:20px; text-align:right;}
-  .total-val{font-size:32px; font-weight:900;}
-  .sig-line{border-top:2px solid #000; text-align:center; padding-top:10px; font-weight:bold; font-size:11px; text-transform:uppercase;}
-</style></head><body>
-<div class="hdr">
-  <div class="logo-area">${logoImgHtml}<div><span class="co-name">HS PACKAGES</span><div class="co-info">${ADDR}<br/>${PHONE}</div></div></div>
-  <div style="text-align:right"><h1>INVOICE</h1><strong>No: #${billNo}</strong><br/>Date: ${date}</div>
-</div>
-<div class="meta-grid">
-  <div class="buyer-box">Bill To:<br/><div style="font-size:22px; font-weight:900;">${partyName}</div></div>
-  <div style="text-align:right">Total Cartons: <strong>${Number(totalCartonCount)}</strong></div>
-</div>
-<table class="main-table">
-  <thead><tr><th>#</th><th>Description</th><th>Color</th><th>Brand</th><th>MIC</th><th>CTN</th><th>P.Qty</th><th>Total</th><th>Rate</th><th>Amount</th></tr></thead>
-  <tbody>${rowsHtml}</tbody>
-</table>
-<div style="display:flex; justify-content:space-between; gap:30px;">
-  <div style="flex:1; border:1px solid #ccc; padding:15px; border-radius:4px;">Amount in Words:<br/><strong>${toWords(grandTotal)}</strong></div>
-  <div class="total-box">Grand Total:<div class="total-val">Rs. ${grandTotal.toLocaleString()}</div></div>
-</div>
-<div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:50px; margin-top:100px;">
-  <div class="sig-line">Prepared By</div><div class="sig-line">Receiver's Sign</div><div class="sig-line">Authorized Signatory</div>
-</div>
-<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>
-</body></html>`;
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Invoice_${billNo}_${partyName}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
+    body { padding: 40px; background: #fff; color: #1a1a1a; font-size: 12px; line-height: 1.4; }
+    .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #e5e7eb; padding-bottom: 20px; }
+    .brand-section { display: flex; align-items: center; gap: 15px; }
+    .brand-name { font-size: 32px; font-weight: 800; letter-spacing: -1px; color: #059669; }
+    .brand-name span { color: #111; }
+    .brand-details { font-size: 10px; color: #6b7280; margin-top: 4px; line-height: 1.5; text-transform: uppercase; }
+    .invoice-label { text-align: right; }
+    .invoice-label h1 { font-size: 40px; font-weight: 800; color: #f3f4f6; margin-bottom: -15px; letter-spacing: 2px; }
+    .meta-item { font-size: 13px; font-weight: 700; }
+    .meta-item span { color: #6b7280; font-weight: 400; }
+    .client-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 30px; }
+    .info-box { background: #f9fafb; padding: 20px; border-radius: 12px; border: 1px solid #f3f4f6; }
+    .info-label { font-size: 9px; font-weight: 800; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .info-value { font-size: 18px; font-weight: 700; color: #111; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+    th { background: #111827; color: #fff; padding: 12px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
+    th:nth-child(2) { text-align: left; }
+    td { padding: 12px 10px; border-bottom: 1px solid #f3f4f6; color: #374151; font-size: 11px; }
+    tr:nth-child(even) { background: #fcfcfc; }
+    .summary-container { display: flex; justify-content: space-between; align-items: flex-start; gap: 40px; margin-top: 20px; }
+    .words-box { flex: 1; padding: 15px; border-left: 3px solid #10b981; background: #f0fdf4; border-radius: 0 8px 8px 0; }
+    .total-card { width: 280px; background: #111827; color: #fff; padding: 20px; border-radius: 16px; text-align: right; }
+    .total-card .label { font-size: 10px; opacity: 0.7; text-transform: uppercase; margin-bottom: 5px; }
+    .total-card .value { font-size: 26px; font-weight: 800; color: #10b981; }
+    .signature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 80px; text-align: center; }
+    .sig-line { border-top: 1.5px solid #e5e7eb; padding-top: 10px; font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+    @media print { body { padding: 20px; } .total-card { border: 1px solid #111; } button { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header-container">
+    <div class="brand-section">
+      ${logoImgHtml}
+      <div>
+        <div class="brand-name">HS <span>PACKAGES</span></div>
+        <div class="brand-details">${ADDR}<br/>${PHONE}</div>
+      </div>
+    </div>
+    <div class="invoice-label">
+      <h1>INVOICE</h1>
+      <div class="invoice-meta">
+        <div class="meta-item"><span>No:</span> #${billNo}</div>
+        <div class="meta-item"><span>Date:</span> ${date}</div>
+      </div>
+    </div>
+  </div>
+  <div class="client-grid">
+    <div class="info-box"><div class="info-label">Bill To / Buyer</div><div class="info-value">${partyName}</div></div>
+    <div class="info-box" style="text-align: right;"><div class="info-label">Shipment Details</div><div class="info-value">${totalCartonCount} <span style="font-size:12px; color:#6b7280;">Cartons Total</span></div></div>
+  </div>
+  <table>
+    <thead><tr><th style="width:40px">#</th><th>Product Description</th><th>Color</th><th>CTN</th><th>P/Qty</th><th>Total Units</th><th>Rate</th><th>Amount (PKR)</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="summary-container">
+    <div class="words-box"><div class="info-label">Amount in Words</div><div style="font-weight:700; color:#065f46; font-style:italic;">${toWords(grandTotal)}</div></div>
+    <div class="total-card"><div class="label">Grand Total</div><div class="value">Rs. ${grandTotal.toLocaleString()}</div></div>
+  </div>
+  <div class="signature-grid">
+    <div class="sig-line">Prepared By</div><div class="sig-line">Receiver's Signature</div><div class="sig-line">Authorized Signatory</div>
+  </div>
+  <script>window.onload = () => { setTimeout(() => { window.print(); window.onafterprint = () => window.close(); }, 500); };</script>
+</body>
+</html>`;
 };
 
+// ── MAIN SALE INVOICE COMPONENT ─────────────────────────────
 const SaleInvoice = () => {
   const { saveBill } = useAccounts();
   const { inventory, updateStock, refreshInventory } = useContext(StockContext);
@@ -121,25 +159,12 @@ const SaleInvoice = () => {
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
 
-  // Form State (Baki ki bachi hui details restored!)
   const [form, setForm] = useState({
-    sizeUnit: 'mm',
-    sizeMm: '',
-    sizeInch: '',
-    yards: '',
-    colour: '',
-    brand: '',
-    micron: '',
-    totalCarton: '',
-    perCtnQty: '',
-    rate: '',
-    cartonType: 'Small', // Dedicated for inventory matching
-    cartonSize: '10'    // Dedicated for inventory matching
+    sizeUnit: 'mm', sizeMm: '', sizeInch: '', yards: '', colour: '', brand: '', micron: '', totalCarton: '', perCtnQty: '', rate: '', cartonType: 'Small', cartonSize: '10'
   });
 
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  // ── LIVE STOCK SEARCH LOGIC (Silent Background Link) ──
   const matchedStock = useMemo(() => {
     if (!form.brand || !form.cartonSize) return null;
     return inventory.find(i => 
@@ -160,15 +185,10 @@ const SaleInvoice = () => {
     ].filter(Boolean).join(' / ');
 
     setRows(p => [...p, { 
-      id: Date.now(), 
-      ...form, 
-      sizeLabel, 
-      inventoryId: matchedStock?._id || matchedStock?.id, // ID capture for deduction
-      totalQty: tc * pc, 
-      total: (tc * pc) * parseFloat(form.rate) 
+      id: Date.now(), ...form, sizeLabel, 
+      inventoryId: matchedStock?._id || matchedStock?.id, 
+      totalQty: tc * pc, total: (tc * pc) * parseFloat(form.rate) 
     }]);
-    
-    // Clear only entry fields
     setForm(prev => ({...prev, totalCarton: '', yards: '', rate: '', perCtnQty: ''}));
   };
 
@@ -176,34 +196,13 @@ const SaleInvoice = () => {
     if (!billNo || !buyerName || rows.length === 0) return;
     setSaving(true);
     try {
-      // 1. Save Bill to Account History
-      await saveBill({ 
-        billType: 'Sale', 
-        billNo, 
-        partyName: buyerName, 
-        date, 
-        items: rows, 
-        grandTotal: rows.reduce((s,r)=>s+r.total,0), 
-        totalCartonCount: rows.reduce((s,r)=>s+Number(r.totalCarton),0), 
-        logo 
-      });
-
-      // 2. Auto Deduction loop (Sab items minus honge)
-      for (const row of rows) {
-        if (row.inventoryId) {
-          await updateStock(row.inventoryId, -Number(row.totalCarton));
-        }
-      }
-
+      await saveBill({ billType: 'Sale', billNo, partyName: buyerName, date, items: rows, grandTotal: rows.reduce((s,r)=>s+r.total,0), totalCartonCount: rows.reduce((s,r)=>s+Number(r.totalCarton),0), logo });
+      for (const row of rows) { if (row.inventoryId) { await updateStock(row.inventoryId, -Number(row.totalCarton)); } }
       setPopMsg(`✅ Bill #${billNo} Saved & Inventory Deducted!`);
       setTimeout(() => setPopMsg(''), 6000);
       setRows([]); setBillNo(''); setBuyerName('');
       refreshInventory();
-    } catch (err) {
-      alert("Error: " + err.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { alert("Error: " + err.message); } finally { setSaving(false); }
   };
 
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
@@ -211,17 +210,14 @@ const SaleInvoice = () => {
 
   return (
     <div className="text-white min-h-screen pb-10 max-w-7xl mx-auto px-4 font-sans">
-      
-      {/* Pop-up Notification */}
       {popMsg && (
-        <div className="fixed top-10 right-10 z-50 bg-[#10b981] text-black p-5 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-right duration-500 border border-white/20">
+        <div className="fixed top-10 right-10 z-50 bg-[#10b981] text-black p-5 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 animate-in slide-in-from-right">
            <div className="bg-black/20 p-2 rounded-full"><CheckCircle2 size={24}/></div>
            <p className="font-bold text-sm">{popMsg}</p>
            <button onClick={()=>setPopMsg('')}><X size={18}/></button>
         </div>
       )}
 
-      {/* Header */}
       <div className="flex justify-between items-center mb-8 pt-8">
         <div>
           <h1 className="text-4xl font-black italic text-[#10b981]">HS <span className="text-white">PACKAGES</span></h1>
@@ -229,11 +225,10 @@ const SaleInvoice = () => {
         </div>
         <div className="flex gap-3">
           <button onClick={handleSave} disabled={saving || rows.length === 0} className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-6 py-3 rounded-2xl font-black text-xs hover:bg-emerald-500 hover:text-black transition-all">SAVE TO DB</button>
-          <button onClick={() => {const h = generateInvoiceHTML({billNo, partyName:buyerName, date, items:rows, grandTotal, totalCartonCount, logo}); const w = window.open('','_blank'); w.document.write(h); w.document.close();}} className="bg-emerald-500 text-black px-6 py-3 rounded-2xl font-black text-xs hover:scale-105 transition-all shadow-[0_0_20px_rgba(34,197,94,0.3)]"><Printer size={16}/> PRINT</button>
+          <button onClick={() => {const h = generateInvoiceHTML({billNo, partyName:buyerName, date, items:rows, grandTotal, totalCartonCount, logo}); const w = window.open('','_blank'); w.document.write(h); w.document.close();}} className="bg-emerald-500 text-black px-6 py-3 rounded-2xl font-black text-xs hover:scale-105 transition-all shadow-[0_0_20px_rgba(34,197,94,0.3)] flex items-center gap-2"><Printer size={16}/> PRINT</button>
         </div>
       </div>
 
-      {/* Meta Card (Logo restored!) */}
       <div className="bg-white/[0.03] border border-white/10 p-8 rounded-[2.5rem] mb-6 flex flex-col md:flex-row gap-8 items-center backdrop-blur-xl">
         <div className="shrink-0 text-center">
           {logo ? (
@@ -250,14 +245,12 @@ const SaleInvoice = () => {
         </div>
       </div>
 
-      {/* Main Form & Link Status */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3 bg-white/[0.03] border border-white/10 p-8 rounded-[2.5rem] shadow-xl">
              <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5 w-fit mb-6">
                 <button onClick={() => upd('sizeUnit', 'mm')} className={`px-8 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all ${form.sizeUnit === 'mm' ? 'bg-[#10b981] text-black' : 'text-gray-500'}`}>MM</button>
                 <button onClick={() => upd('sizeUnit', 'inch')} className={`px-8 py-2.5 text-[10px] font-black uppercase rounded-xl transition-all ${form.sizeUnit === 'inch' ? 'bg-[#10b981] text-black' : 'text-gray-500'}`}>Inches</button>
              </div>
-
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 {form.sizeUnit === 'mm' ? <SelectOrCustom value={form.sizeMm} onChange={v=>upd('sizeMm',v)} options={SIZE_MM} placeholder="Size MM"/> : <SelectOrCustom value={form.sizeInch} onChange={v=>upd('sizeInch',v)} options={SIZE_INCH} placeholder="Size INCH"/>}
                 <SelectOrCustom value={form.yards} onChange={v=>upd('yards',v)} options={['40','50','80','100','150','200']} placeholder="Yards"/>
@@ -268,8 +261,6 @@ const SaleInvoice = () => {
                 <input type="number" placeholder="Total CTN" value={form.totalCarton} onChange={e=>upd('totalCarton',e.target.value)} className="bg-black/40 p-3 rounded-xl border border-white/10 outline-none text-white font-bold"/>
                 <input type="number" placeholder="P/CTN Qty" value={form.perCtnQty} onChange={e=>upd('perCtnQty',e.target.value)} className="bg-black/40 p-3 rounded-xl border border-white/10 outline-none text-white font-bold"/>
              </div>
-
-             {/* Stock Link Helper (Automatically matches as you type/select brand) */}
              <div className="flex flex-wrap gap-4 items-center bg-black/20 p-4 rounded-2xl border border-white/5">
                 <p className="text-[10px] font-black uppercase text-gray-500">Stock Matching:</p>
                 <select value={form.cartonType} onChange={e=>upd('cartonType',e.target.value)} className="bg-transparent text-xs font-bold border-b border-white/10 outline-none"><option value="Small">Small</option><option value="Large">Large</option></select>
@@ -277,8 +268,6 @@ const SaleInvoice = () => {
                 <button onClick={addItem} className="ml-auto bg-[#10b981] text-black font-black px-10 py-3 rounded-xl hover:scale-105 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"><Plus size={18}/> ADD TO LIST</button>
              </div>
           </div>
-
-          {/* Live Stock Monitor (Restored visual) */}
           <div className={`p-8 rounded-[2.5rem] border-2 transition-all flex flex-col justify-center items-center text-center ${matchedStock ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/10'}`}>
               <div className={`p-4 rounded-3xl mb-4 ${matchedStock ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
                 {matchedStock ? <Database size={32}/> : <AlertTriangle size={32}/>}
@@ -295,7 +284,6 @@ const SaleInvoice = () => {
           </div>
       </div>
 
-      {/* Rows Table */}
       <div className="bg-white/[0.01] border border-white/5 rounded-[2.5rem] overflow-hidden mt-8 shadow-inner">
         <table className="w-full text-left">
           <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest"><tr><th className="p-6">Description</th><th className="text-center">CTN</th><th className="text-center">Rolls</th><th className="text-right">Rate</th><th className="text-right p-6">Amount</th><th className="p-6"></th></tr></thead>
@@ -318,9 +306,8 @@ const SaleInvoice = () => {
         </table>
       </div>
 
-      {/* Summary Footer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-        <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] flex flex-col justify-center"><p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Amount In Words</p><p className="text-sm font-black text-slate-400 italic">"${toWords(grandTotal)}"</p></div>
+        <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] flex flex-col justify-center"><p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Amount In Words</p><p className="text-sm font-black text-slate-400 italic">"{toWords(grandTotal)}"</p></div>
         <div className="bg-[#10b981] p-8 rounded-[3rem] flex items-center justify-between shadow-2xl text-emerald-950 font-black uppercase">
           <div className="leading-tight"><span className="opacity-60 text-xs font-bold">Total Dispatch</span><p className="text-lg">{totalCartonCount} Units</p></div>
           <p className="text-5xl tracking-tighter">Rs. {grandTotal.toLocaleString()}</p>
