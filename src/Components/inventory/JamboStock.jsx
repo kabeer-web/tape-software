@@ -1,76 +1,98 @@
-import { useState, useContext, useEffect } from 'react';
-import { StockContext } from "/src/Components/inventory/StockContext";
+import { useContext } from 'react';
+import { StockContext } from './StockContext';
+import { NavLink } from 'react-router-dom';
+import { Package, AlertTriangle, Layers, ArrowRight } from 'lucide-react';
 
-const JamboStock = () => {
-  const { addRoll, inventory } = useContext(StockContext);
-  
-  // Local state for UI inputs
-  const [formData, setFormData] = useState({ date: '', width: '', totalYards: '' });
-  const [searchTerm, setSearchTerm] = useState('');
+const JAMBO_TYPES = [
+  { cat:'Clear',      label:'Clear Tape',      path:'/inventory/jambo/clear' },
+  { cat:'Tan',        label:'Tan Tape',         path:'/inventory/jambo/tan' },
+  { cat:'SuperYellow',label:'Super Yellow',     path:'/inventory/jambo/super-yellow' },
+  { cat:'SuperClear', label:'Super Clear',      path:'/inventory/jambo/super-clear' },
+  { cat:'Color',      label:'Color Tape',       path:'/inventory/jambo/color-tape' },
+  { cat:'Cloth',      label:'Cloth Tape',       path:'/inventory/jambo/cloth-tape' },
+  { cat:'Masking',    label:'Masking Tape',     path:'/inventory/jambo/masking' },
+  { cat:'Tissue',     label:'Tissue Tape',      path:'/inventory/jambo/tissue-tape' },
+  { cat:'Foam',       label:'Foam Tape',        path:'/inventory/jambo/foam-tape' },
+];
 
-  // Filtering inventory locally for this category
-  const filteredStock = inventory.filter(item => 
-    item.category === 'Clear' && 
-    String(item.rollNo).includes(searchTerm)
-  );
+const LOW = 50;
 
-  const addStock = () => {
-    if (!formData.totalYards) return;
-    
-    // addRoll ko data bhej rahe hain, rollNo context khud generate karega
-    addRoll({
-      category: 'Clear',
-      width: formData.width,
-      yards: parseFloat(formData.totalYards),
-      date: formData.date || new Date().toLocaleDateString()
-    });
+export default function JamboStock() {
+  const { inventory, loading } = useContext(StockContext);
 
-    // Reset form
-    setFormData({ date: '', width: '', totalYards: '' });
-  };
+  if (loading) return <div className="flex items-center justify-center h-64 text-[#22c55e] font-bold">Loading...</div>;
+
+  const allJambo = inventory.filter(i => JAMBO_TYPES.map(t=>t.cat).includes(i.category||i.type));
+  const totalRolls = allJambo.length;
+  const totalYards = allJambo.reduce((s,i)=>s+(Number(i.yards)||0),0);
+  const lowItems   = allJambo.filter(i=>Number(i.yards)<LOW).length;
 
   return (
-    <div className="p-8 bg-[#121212] border border-[#22c55e]/20 rounded-3xl text-white w-full">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-black text-[#22c55e]">Clear Tape Inventory</h2>
-        <input 
-          placeholder="Search Roll No..." 
-          className="bg-[#0a0a0a] border border-[#22c55e]/20 px-4 py-2 rounded-xl focus:outline-none"
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+    <div className="text-white min-h-screen">
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">JAMBO STOCK</h1>
+        <p className="text-gray-500 text-xs mt-1 uppercase tracking-widest">All Jambo Roll Types Overview</p>
       </div>
 
-      {/* Input Form */}
-      <div className="grid grid-cols-4 gap-4 mb-8 bg-[#0a0a0a] p-6 rounded-2xl border border-[#22c55e]/10">
-        <input type="date" className="bg-[#121212] p-3 rounded-lg border" onChange={(e) => setFormData({...formData, date: e.target.value})} value={formData.date} />
-        <input placeholder="Width" className="bg-[#121212] p-3 rounded-lg border" onChange={(e) => setFormData({...formData, width: e.target.value})} value={formData.width} />
-        <input placeholder="Total Yards" className="bg-[#121212] p-3 rounded-lg border" onChange={(e) => setFormData({...formData, totalYards: e.target.value})} value={formData.totalYards} />
-        <button onClick={addStock} className="bg-[#22c55e] text-black font-bold rounded-lg">Add Roll</button>
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-3 mb-8">
+        <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
+          <Package className="text-[#22c55e]" size={24}/>
+          <div><p className="text-2xl font-black text-[#22c55e]">{totalRolls}</p><p className="text-[10px] text-gray-500 uppercase">Total Rolls</p></div>
+        </div>
+        <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
+          <Layers className="text-[#22c55e]" size={24}/>
+          <div><p className="text-2xl font-black text-[#22c55e]">{totalYards.toFixed(0)}</p><p className="text-[10px] text-gray-500 uppercase">Total Yards</p></div>
+        </div>
+        <div className="bg-white/[0.03] border border-yellow-500/20 rounded-2xl p-4 flex items-center gap-3">
+          <AlertTriangle className="text-yellow-500" size={24}/>
+          <div><p className="text-2xl font-black text-yellow-500">{lowItems}</p><p className="text-[10px] text-gray-500 uppercase">Low Stock</p></div>
+        </div>
       </div>
 
-      {/* Table */}
-      <table className="w-full text-left">
-        <thead>
-          <tr className="text-gray-500 border-b border-[#22c55e]/20">
-            <th className="pb-4">Date</th>
-            <th className="pb-4">Roll No</th>
-            <th className="pb-4">Width</th>
-            <th className="pb-4">Yards</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredStock.map((item) => (
-            <tr key={item.id} className="border-b border-[#22c55e]/10">
-              <td className="py-4">{item.date}</td>
-              <td className="py-4 font-bold text-[#22c55e]">#{item.rollNo}</td>
-              <td className="py-4">{item.width}</td>
-              <td className="py-4 font-bold">{item.yards}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Type cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {JAMBO_TYPES.map(({ cat, label, path }) => {
+          const items      = inventory.filter(i=>(i.category===cat||i.type===cat));
+          const rolls      = items.length;
+          const yards      = items.reduce((s,i)=>s+(Number(i.yards)||0),0);
+          const low        = items.filter(i=>Number(i.yards)<LOW).length;
+          const hasLow     = low > 0;
+
+          return (
+            <NavLink key={cat} to={path}
+              className={`bg-white/[0.03] rounded-2xl p-5 border transition hover:border-[#22c55e]/50 hover:bg-white/[0.05] group ${hasLow?'border-yellow-500/30':'border-[#22c55e]/20'}`}>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="font-black text-lg">{label}</h3>
+                  <p className="text-xs text-gray-500 uppercase mt-0.5">{cat}</p>
+                </div>
+                {hasLow && (
+                  <span className="text-[10px] bg-yellow-500/20 text-yellow-500 px-2 py-0.5 rounded-full font-bold border border-yellow-500/30">
+                    LOW
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-black/20 rounded-xl p-3 border border-white/5">
+                  <p className="text-[9px] text-gray-500 uppercase font-bold">Rolls</p>
+                  <p className="text-xl font-black text-[#22c55e] mt-0.5">{rolls}</p>
+                </div>
+                <div className="bg-black/20 rounded-xl p-3 border border-white/5">
+                  <p className="text-[9px] text-gray-500 uppercase font-bold">Yards</p>
+                  <p className="text-xl font-black text-[#22c55e] mt-0.5">{yards.toFixed(0)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-gray-500 group-hover:text-[#22c55e] transition">
+                <span>View Details</span>
+                <ArrowRight size={14}/>
+              </div>
+            </NavLink>
+          );
+        })}
+      </div>
     </div>
   );
-};
-
-export default JamboStock;
+}
