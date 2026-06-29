@@ -38,37 +38,40 @@ export const AccountsProvider = ({ children }) => {
     return acc;
   }, {});
 
-  // AccountsProvider ke andar saveBill function ko replace karein:
+ const saveBill = async (billData) => {
+    try {
+      // 1. Bill save karein
+      const saved = await addBill(billData);
+      
+      // Bills ki list update karein
+      setBills(prev => [saved, ...prev]);
 
-const saveBill = async (billData) => {
-  try {
-    // 1. Bill Save Karo
-    const savedBill = await addBill(billData);
-    
-    // 2. Auto Ledger Entry Create Karo
-    // Agar Sale hai to 'debit' (customer se paise lene hain)
-    // Agar Purchase hai to 'credit' (supplier ko paise dene hain)
-    const ledgerPayload = {
-      party_name:   savedBill.partyName,
-      party_type:   savedBill.billType,
-      entry_type:   savedBill.billType === 'Sale' ? 'debit' : 'credit',
-      description:  `Bill No: ${savedBill.billNo} (Auto Generated)`,
-      amount:       parseFloat(savedBill.grandTotal),
-      date:         savedBill.date,
-      ref_bill_no:  savedBill.billNo,
-      bill_id:      savedBill._id // Link with Bill
-    };
+      // 2. AUTO-LEDGER ENTRY (Is code ko dhyan se dekhein)
+      try {
+        const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
+        
+        // Yahan call ho raha hai addLedgerEntry
+        await addLedgerEntry({
+          party_name:   saved.partyName,
+          party_type:   saved.billType || 'Sale',
+          entry_type:   entryType,
+          description:  `Auto Bill Entry - Bill No: ${saved.billNo}`,
+          amount:       parseFloat(saved.grandTotal) || 0,
+          date:         saved.date || new Date().toLocaleDateString('en-GB'),
+          ref_bill_no:  saved.billNo,
+          bill_id:      saved._id 
+        });
+        console.log("✅ Ledger auto-updated!");
+      } catch (ledgerErr) {
+        console.error("❌ Ledger auto-update failed, but bill was saved:", ledgerErr);
+      }
 
-    await addLedgerEntry(ledgerPayload);
-    
-    setBills(prev => [savedBill, ...prev]);
-    return savedBill._id;
-  } catch (err) {
-    console.error('saveBill & Ledger Error:', err);
-    throw err;
-  }
-};
-
+      return saved._id;
+    } catch (err) {
+      console.error('saveBill main error:', err);
+      throw err;
+    }
+  };
   const updateBillData = async (id, updatedBill) => {
     try {
       const updated = await updateBill(id, updatedBill);
