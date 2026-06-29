@@ -1,5 +1,32 @@
 import { supabase } from './supabase';
+// ─── LEDGER ──────────────────────────────────────────────
+export const getLedgerEntries = async (partyName) => {
+  let q = supabase.from('ledger_entries').select('*').order('date', { ascending: true });
+  if (partyName) q = q.eq('party_name', partyName);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data || []).map(e => ({ ...e, _id: e.id }));
+};
 
+export const addLedgerEntry = async (entry) => {
+  const { data, error } = await supabase
+    .from('ledger_entries').insert([entry]).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const updateLedgerEntry = async (id, updates) => {
+  const { data, error } = await supabase
+    .from('ledger_entries').update(updates).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const deleteLedgerEntry = async (id) => {
+  const { error } = await supabase.from('ledger_entries').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
 // ═══════════════════════════════════════
 // INVENTORY
 // ═══════════════════════════════════════
