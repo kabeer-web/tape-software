@@ -7,7 +7,7 @@ import {
   Users, Plus, Trash2, Pencil, Check, X,
   TrendingUp, TrendingDown, Search,
   ChevronRight, ChevronDown, Calendar,
-  AlertCircle, CreditCard, DollarSign
+  AlertCircle, CreditCard, DollarSign, FileText // FileText icon add kia for tags
 } from 'lucide-react';
 
 // ── Pre-loaded Parties ─────────────────────────────────
@@ -46,7 +46,7 @@ const MONTHS = [
 const today = () => new Date().toLocaleDateString('en-GB');
 
 const emptyEntry = {
-  entry_type:  'credit',
+  entry_type:  'credit', // Payment receive k liye default credit
   description: '',
   amount:      '',
   date:        today(),
@@ -139,7 +139,7 @@ export default function Ledger() {
     });
   }, [filteredEntries]);
 
-  // ── Add entry ──────────────────────────────────────────
+  // ── Add Manual Payment/Entry ───────────────────────────
   const handleAdd = async () => {
     if (!activeParty || !form.amount || !form.entry_type) {
       flash('❌ Amount aur type zaroori hai'); return;
@@ -151,7 +151,7 @@ export default function Ledger() {
         party_name:   activeParty,
         party_type:   partyData?.type || activeType,
         entry_type:   form.entry_type,
-        description:  form.description,
+        description:  form.description || (form.entry_type === 'credit' ? 'Payment Received' : 'Manual Bill Entry'),
         amount:       parseFloat(form.amount),
         date:         form.date || today(),
         ref_bill_no:  form.ref_bill_no,
@@ -224,7 +224,7 @@ export default function Ledger() {
         <Users className="text-[#22c55e]" size={24}/>
         <div>
           <h1 className="text-2xl font-black">PARTY <span className="text-[#22c55e]">LEDGER</span></h1>
-          <p className="text-gray-500 text-xs mt-0.5">Credit / Debit — Monthly Hisaab Kitaab</p>
+          <p className="text-gray-500 text-xs mt-0.5">Auto-Bills Sync & Manual Payments Hisaab Kitaab</p>
         </div>
       </div>
 
@@ -326,7 +326,7 @@ export default function Ledger() {
                       <p className="text-base font-black text-red-400">{(activePartyData?.totalDebit||0).toLocaleString()}</p>
                     </div>
                     <div className="bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-xl px-4 py-2.5 text-center">
-                      <p className="text-[9px] text-gray-500 uppercase font-bold">Total Credit</p>
+                      <p className="text-[9px] text-gray-500 uppercase font-bold">Total Credit (Payments)</p>
                       <p className="text-base font-black text-[#22c55e]">{(activePartyData?.totalCredit||0).toLocaleString()}</p>
                     </div>
                     <div className={`border rounded-xl px-4 py-2.5 text-center ${
@@ -334,11 +334,11 @@ export default function Ledger() {
                         ? 'bg-orange-500/10 border-orange-500/20'
                         : 'bg-[#22c55e]/10 border-[#22c55e]/20'
                     }`}>
-                      <p className="text-[9px] text-gray-500 uppercase font-bold">Balance</p>
+                      <p className="text-[9px] text-gray-500 uppercase font-bold">Net Balance</p>
                       <p className={`text-base font-black ${(activePartyData?.balance||0) > 0 ? 'text-orange-400' : 'text-[#22c55e]'}`}>
                         {(activePartyData?.balance||0) > 0
-                          ? `${(activePartyData?.balance||0).toLocaleString()} DR`
-                          : `${Math.abs(activePartyData?.balance||0).toLocaleString()} CR`
+                          ? `${(activePartyData?.balance||0).toLocaleString()} DR (Lene)`
+                          : `${Math.abs(activePartyData?.balance||0).toLocaleString()} CR (Dene)`
                         }
                       </p>
                     </div>
@@ -383,7 +383,7 @@ export default function Ledger() {
                   onClick={() => { setShowAddForm(p=>!p); setForm(emptyEntry); }}
                   className="bg-[#22c55e] text-black font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 hover:bg-[#1db954] transition"
                 >
-                  <Plus size={13}/> Add Entry
+                  <Plus size={13}/> Manual Payment / Entry
                 </button>
               </div>
 
@@ -399,17 +399,17 @@ export default function Ledger() {
                       <div className="flex rounded-xl overflow-hidden border border-[#22c55e]/20">
                         <button
                           type="button"
-                          onClick={() => setForm(p=>({...p, entry_type:'debit'}))}
-                          className={`flex-1 py-2.5 text-xs font-bold transition ${form.entry_type==='debit'?'bg-red-500 text-white':'bg-black/30 text-gray-400 hover:text-white'}`}
-                        >
-                          Debit
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setForm(p=>({...p, entry_type:'credit'}))}
                           className={`flex-1 py-2.5 text-xs font-bold transition ${form.entry_type==='credit'?'bg-[#22c55e] text-black':'bg-black/30 text-gray-400 hover:text-white'}`}
                         >
-                          Credit
+                          Credit (In)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setForm(p=>({...p, entry_type:'debit'}))}
+                          className={`flex-1 py-2.5 text-xs font-bold transition ${form.entry_type==='debit'?'bg-red-500 text-white':'bg-black/30 text-gray-400 hover:text-white'}`}
+                        >
+                          Debit (Out)
                         </button>
                       </div>
                     </div>
@@ -454,7 +454,7 @@ export default function Ledger() {
                       <input
                         value={form.description}
                         onChange={e => setForm(p=>({...p,description:e.target.value}))}
-                        placeholder="e.g. Payment received, Bill amount, etc."
+                        placeholder="e.g. Cash received, Online Transfer, etc."
                         className={inp}
                       />
                     </div>
@@ -489,8 +489,8 @@ export default function Ledger() {
                       <th className="p-3">Date</th>
                       <th className="p-3">Ref / Bill #</th>
                       <th className="p-3">Description</th>
-                      <th className="p-3 text-right">Debit</th>
-                      <th className="p-3 text-right">Credit</th>
+                      <th className="p-3 text-right">Debit (Sale)</th>
+                      <th className="p-3 text-right">Credit (Paid)</th>
                       <th className="p-3 text-right">Balance</th>
                       <th className="p-3 text-right w-16">Actions</th>
                     </tr>
@@ -524,15 +524,22 @@ export default function Ledger() {
                           <td className="p-3">
                             {isEdit
                               ? <input value={editData.ref_bill_no||''} onChange={e=>setEditData(d=>({...d,ref_bill_no:e.target.value}))} className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs w-20"/>
-                              : <span className="text-xs text-gray-300">{entry.ref_bill_no || '—'}</span>
+                              : <span className="text-xs text-gray-300 font-mono">{entry.ref_bill_no || '—'}</span>
                             }
                           </td>
 
-                          {/* Description */}
+                          {/* Description (With Auto Bill Tag Support) */}
                           <td className="p-3 max-w-[200px]">
                             {isEdit
                               ? <input value={editData.description||''} onChange={e=>setEditData(d=>({...d,description:e.target.value}))} className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs w-full"/>
-                              : <span className="text-xs text-gray-300 truncate block">{entry.description || '—'}</span>
+                              : <div>
+                                  <span className="text-xs text-gray-300 truncate block">{entry.description || '—'}</span>
+                                  {entry.bill_id && (
+                                    <span className="text-[9px] text-[#22c55e] bg-[#22c55e]/10 inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded border border-[#22c55e]/20">
+                                      <FileText size={9}/> System Bill
+                                    </span>
+                                  )}
+                                </div>
                             }
                           </td>
 
@@ -632,11 +639,11 @@ export default function Ledger() {
                       </p>
                       <div className="grid grid-cols-2 gap-1 mt-2">
                         <div>
-                          <p className="text-[9px] text-gray-600">Debit</p>
+                          <p className="text-[9px] text-gray-600">Debit (Sales)</p>
                           <p className="text-xs font-black text-red-400">{m.debit.toLocaleString()}</p>
                         </div>
                         <div>
-                          <p className="text-[9px] text-gray-600">Credit</p>
+                          <p className="text-[9px] text-gray-600">Credit (Payments)</p>
                           <p className="text-xs font-black text-[#22c55e]">{m.credit.toLocaleString()}</p>
                         </div>
                       </div>
