@@ -1,6 +1,6 @@
 // AccountsContext.jsx ki pehli line aisi honi chahiye:
 import { createContext, useState, useEffect, useContext } from 'react';
-import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from '../../../api'; // <--- Ye add karein
+import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../api";
 
 export const AccountsContext = createContext(null);
 
