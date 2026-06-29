@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+
 // ─── LEDGER ──────────────────────────────────────────────
 export const getLedgerEntries = async (partyName) => {
   let q = supabase.from('ledger_entries').select('*').order('date', { ascending: true });
@@ -27,6 +28,7 @@ export const deleteLedgerEntry = async (id) => {
   if (error) throw new Error(error.message);
   return true;
 };
+
 // ═══════════════════════════════════════
 // INVENTORY
 // ═══════════════════════════════════════
@@ -237,3 +239,22 @@ export const deleteProduction = async (id) => {
   if (error) throw new Error(error.message);
   return true;
 };
+
+/*
+SUPABASE SCHEMA UPDATES:
+create table ledger_entries (
+  id uuid default gen_random_uuid() primary key,
+  party_name text not null,
+  party_type text default 'Sale',
+  entry_type text not null,
+  description text,
+  amount numeric default 0,
+  date text,
+  ref_bill_no text,
+  bill_id uuid references bills(id) on delete cascade, -- Added for Auto Sync
+  created_at timestamptz default now()
+);
+
+alter table ledger_entries enable row level security;
+create policy "Allow all" on ledger_entries for all using (true) with check (true);
+*/
