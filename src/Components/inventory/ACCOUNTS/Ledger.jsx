@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   getLedgerEntries, addLedgerEntry,
   updateLedgerEntry, deleteLedgerEntry
-} from '../../../api';
+} from "../../api";
 import {
   Users, Plus, Trash2, Pencil, Check, X,
   TrendingUp, TrendingDown, Search,
