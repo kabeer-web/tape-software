@@ -37,15 +37,36 @@ export const AccountsProvider = ({ children }) => {
     return acc;
   }, {});
 
-  const saveBill = async (billData) => {
-    try {
-      const saved = await addBill(billData);
-      setBills(prev => [saved, ...prev]);
-      return saved._id;
-    } catch (err) {
-      console.error('saveBill error:', err);
-    }
-  };
+  // AccountsProvider ke andar saveBill function ko replace karein:
+
+const saveBill = async (billData) => {
+  try {
+    // 1. Bill Save Karo
+    const savedBill = await addBill(billData);
+    
+    // 2. Auto Ledger Entry Create Karo
+    // Agar Sale hai to 'debit' (customer se paise lene hain)
+    // Agar Purchase hai to 'credit' (supplier ko paise dene hain)
+    const ledgerPayload = {
+      party_name:   savedBill.partyName,
+      party_type:   savedBill.billType,
+      entry_type:   savedBill.billType === 'Sale' ? 'debit' : 'credit',
+      description:  `Bill No: ${savedBill.billNo} (Auto Generated)`,
+      amount:       parseFloat(savedBill.grandTotal),
+      date:         savedBill.date,
+      ref_bill_no:  savedBill.billNo,
+      bill_id:      savedBill._id // Link with Bill
+    };
+
+    await addLedgerEntry(ledgerPayload);
+    
+    setBills(prev => [savedBill, ...prev]);
+    return savedBill._id;
+  } catch (err) {
+    console.error('saveBill & Ledger Error:', err);
+    throw err;
+  }
+};
 
   const updateBillData = async (id, updatedBill) => {
     try {
