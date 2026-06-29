@@ -9,16 +9,18 @@ export const getLedgerEntries = async (partyName) => {
   return (data || []).map(e => ({ ...e, _id: e.id }));
 };
 
+
+export const updateLedgerEntry = async (id, updates) => {
+  const { data, error } = await supabase
+    .from('ledger_entries').update(updates).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
 // api.js mein ye export hona chahiye
 export const addLedgerEntry = async (entry) => {
   const { data, error } = await supabase
     .from('ledger_entries').insert([entry]).select().single();
-  if (error) throw new Error(error.message);
-  return { ...data, _id: data.id };
-};
-export const updateLedgerEntry = async (id, updates) => {
-  const { data, error } = await supabase
-    .from('ledger_entries').update(updates).eq('id', id).select().single();
   if (error) throw new Error(error.message);
   return { ...data, _id: data.id };
 };
