@@ -1,4 +1,3 @@
-// AccountsContext.jsx ki pehli line aisi honi chahiye:
 import { createContext, useState, useEffect, useContext } from 'react';
 import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../api";
 
@@ -38,7 +37,7 @@ export const AccountsProvider = ({ children }) => {
     return acc;
   }, {});
 
- const saveBill = async (billData) => {
+  const saveBill = async (billData) => {
     try {
       // 1. Bill save karein
       const saved = await addBill(billData);
@@ -46,11 +45,10 @@ export const AccountsProvider = ({ children }) => {
       // Bills ki list update karein
       setBills(prev => [saved, ...prev]);
 
-      // 2. AUTO-LEDGER ENTRY (Is code ko dhyan se dekhein)
+      // 2. AUTO-LEDGER ENTRY 
       try {
         const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
         
-        // Yahan call ho raha hai addLedgerEntry
         await addLedgerEntry({
           party_name:   saved.partyName,
           party_type:   saved.billType || 'Sale',
@@ -63,7 +61,7 @@ export const AccountsProvider = ({ children }) => {
         });
         console.log("✅ Ledger auto-updated!");
       } catch (ledgerErr) {
-        console.error("❌ Ledger auto-update failed, but bill was saved:", ledgerErr);
+        console.error("❌ Ledger auto-update failed:", ledgerErr);
       }
 
       return saved._id;
@@ -72,6 +70,7 @@ export const AccountsProvider = ({ children }) => {
       throw err;
     }
   };
+
   const updateBillData = async (id, updatedBill) => {
     try {
       const updated = await updateBill(id, updatedBill);
