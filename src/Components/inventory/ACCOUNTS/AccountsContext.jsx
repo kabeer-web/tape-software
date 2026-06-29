@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect, useContext } from 'react';
-import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../api";
+// Correct Path: ../../../api
+import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../../api";
 
 export const AccountsContext = createContext(null);
 
@@ -39,16 +40,12 @@ export const AccountsProvider = ({ children }) => {
 
   const saveBill = async (billData) => {
     try {
-      // 1. Bill save karein
       const saved = await addBill(billData);
-      
-      // Bills ki list update karein
       setBills(prev => [saved, ...prev]);
 
-      // 2. AUTO-LEDGER ENTRY 
       try {
         const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
-        
+        // addLedgerEntry yahan defined hai kyunke upar import kiya hai
         await addLedgerEntry({
           party_name:   saved.partyName,
           party_type:   saved.billType || 'Sale',
@@ -59,14 +56,13 @@ export const AccountsProvider = ({ children }) => {
           ref_bill_no:  saved.billNo,
           bill_id:      saved._id 
         });
-        console.log("✅ Ledger auto-updated!");
+        console.log("✅ Ledger updated!");
       } catch (ledgerErr) {
-        console.error("❌ Ledger auto-update failed:", ledgerErr);
+        console.error("❌ Ledger failed:", ledgerErr);
       }
-
       return saved._id;
     } catch (err) {
-      console.error('saveBill main error:', err);
+      console.error('saveBill error:', err);
       throw err;
     }
   };
@@ -75,26 +71,20 @@ export const AccountsProvider = ({ children }) => {
     try {
       const updated = await updateBill(id, updatedBill);
       setBills(prev => prev.map(b => b._id === id ? updated : b));
-    } catch (err) {
-      console.error('updateBill error:', err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const deleteBillData = async (id) => {
     try {
       await deleteBill(id);
       setBills(prev => prev.filter(b => b._id !== id));
-    } catch (err) {
-      console.error('deleteBill error:', err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   return (
     <AccountsContext.Provider value={{
-      bills, parties, loading,
-      saveBill,
-      updateBill: updateBillData,
-      deleteBill: deleteBillData
+      bills, parties, loading, saveBill,
+      updateBill: updateBillData, deleteBill: deleteBillData
     }}>
       {children}
     </AccountsContext.Provider>
