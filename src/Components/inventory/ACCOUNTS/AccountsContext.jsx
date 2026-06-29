@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 // Correct Path: ../../../api
-import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../../api";
+import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../api";
 
 export const AccountsContext = createContext(null);
 
