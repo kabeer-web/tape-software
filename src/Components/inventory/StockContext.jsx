@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useContext } from 'react';
-import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from '../../../api'; // addLedgerEntry import kiya hai
+import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../api";
 
 export const AccountsContext = createContext(null);
 
