@@ -10,7 +10,7 @@ export const StockProvider = ({ children }) => {
   const [inventory, setInventory] = useState([]);
   const [loading,   setLoading]   = useState(true);
 
-  // --- NEW: Notification Center State ---
+  // --- NEW ADDITIVE CODE: Notification Center ---
   const [notifications, setNotifications] = useState(() => {
     const saved = localStorage.getItem('erp_notifications');
     return saved ? JSON.parse(saved) : [];
@@ -24,10 +24,10 @@ export const StockProvider = ({ children }) => {
     const newNotif = {
       id: Date.now(),
       message,
-      type, // 'warning', 'critical', 'error'
-      item: { brand: item.brand, type: item.cartonType || item.type, size: item.size },
+      type, // 'warning', 'critical', 'out'
+      itemDetails: `${item.brand} ${item.cartonType || item.type} ${item.size}"`,
+      qty: item.qty,
       time: new Date().toLocaleString(),
-      isRead: false
     };
     setNotifications(prev => [newNotif, ...prev]);
   };
@@ -36,14 +36,13 @@ export const StockProvider = ({ children }) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  const checkLowStock = (item, nextQty) => {
+  const checkLowStockTrigger = (item, currentQty) => {
     if (item.category !== 'Carton') return;
-    const details = `${item.brand} ${item.cartonType || item.type} ${item.size}"`;
-    if (nextQty <= 0) addNotification(`OUT OF STOCK: ${details}`, 'error', item);
-    else if (nextQty <= 5) addNotification(`CRITICAL WARNING: ${details}`, 'critical', item);
-    else if (nextQty <= 10) addNotification(`LOW STOCK WARNING: ${details}`, 'warning', item);
+    if (currentQty <= 0) addNotification(`Out of Stock: ${item.brand}`, 'out', item);
+    else if (currentQty <= 5) addNotification(`Critical Warning: ${item.brand}`, 'critical', item);
+    else if (currentQty <= 10) addNotification(`Warning: ${item.brand}`, 'warning', item);
   };
-  // --- END NEW ---
+  // --- END ADDITIVE CODE ---
 
   const refreshInventory = useCallback(async () => {
     setLoading(true);
@@ -82,8 +81,8 @@ export const StockProvider = ({ children }) => {
     const curr = Number(live ? (live[field] || 0) : (item[field] || 0));
     const next = parseFloat((curr + delta).toFixed(4));
     
-    // Low stock check
-    if (field === 'qty') checkLowStock(item, next);
+    // Additive Trigger
+    if (field === 'qty') checkLowStockTrigger(item, next);
 
     if (next <= 0) {
       await deleteInventory(id);
@@ -117,8 +116,8 @@ export const StockProvider = ({ children }) => {
     if (!item) return;
     const next = Math.max(0, (Number(item.qty) || 0) + delta);
     
-    // Low stock check
-    checkLowStock(item, next);
+    // Additive Trigger
+    checkLowStockTrigger(item, next);
 
     if (next <= 0) {
       await deleteInventory(id);
@@ -137,7 +136,7 @@ export const StockProvider = ({ children }) => {
   return (
     <StockContext.Provider value={{
       inventory, loading,
-      notifications, dismissNotification, // New Notification Exports
+      notifications, dismissNotification, // New Additions
       addRoll, adjustStock,
       issueYards, editItemYards,
       updateStock, removeItem,
