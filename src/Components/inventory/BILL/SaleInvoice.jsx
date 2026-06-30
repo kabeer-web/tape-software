@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext } from '../StockContext';
-import { SALE_PARTIES } from '../partiesData';
 import { getLedgerEntries } from '../../../api';
 
 // ── NUMBERS TO WORDS LOGIC ────────────────────────
