@@ -1,101 +1,112 @@
-import { createContext, useState, useEffect, useContext } from 'react';
-import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../api";
+import { createContext, useState, useEffect, useCallback, useContext } from 'react';
+import { getInventory, addInventory, updateInventory, deleteInventory } from '../../api';
 
-// ... Baqi code jo bhi is file mein tha wo wese hi rehne dein ...
-// Bas import line upar wali paste kar dein path theek ho jayega.
-export const AccountsContext = createContext(null);
+export const StockContext = createContext();
+export const useStock = () => useContext(StockContext);
 
-export const useAccounts = () => {
-  const context = useContext(AccountsContext);
-  if (!context) throw new Error('useAccounts must be used within AccountsProvider');
-  return context;
-};
+const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
 
-export const AccountsProvider = ({ children }) => {
-  const [bills, setBills] = useState([]);
-  const [loading, setLoading] = useState(true);
+export const StockProvider = ({ children }) => {
+  const [inventory, setInventory] = useState([]);
+  const [loading,   setLoading]   = useState(true);
 
-  useEffect(() => {
-    getBills()
-      .then(data => setBills(data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+  const refreshInventory = useCallback(async () => {
+    setLoading(true);
+    try { setInventory(await getInventory()); }
+    catch (e) { console.error('refresh:', e); }
+    finally { setLoading(false); }
   }, []);
 
-  const parties = bills.reduce((acc, bill) => {
-    const key = bill.partyName?.trim().toLowerCase();
-    if (!key) return acc;
-    const totalCarton = bill.items?.reduce((s, i) =>
-      s + (parseFloat(i.totalCarton) || parseFloat(i.qty) || 0), 0) || 0;
-    const entry = {
-      billId: bill._id,
-      billNo: bill.billNo,
-      date: bill.date,
-      totalCarton,
-      grandTotal: bill.grandTotal
+  useEffect(() => { refreshInventory(); }, [refreshInventory]);
+
+  // Auto roll number for Jambo
+  const generateRollNo = (inv) => {
+    const nums = inv
+      .filter(i => JAMBO_CATS.includes(i.category))
+      .map(i => parseInt(i.rollNo || i.roll_no || '0', 10))
+      .filter(n => !isNaN(n));
+    return String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0');
+  };
+
+  // Add roll/item
+  const addRoll = async (item) => {
+    const isJambo = JAMBO_CATS.includes(item.category);
+    const payload = {
+      ...item,
+      date: item.date || new Date().toLocaleDateString('en-GB'),
+      ...(isJambo && !item.rollNo && !item.roll_no && { rollNo: generateRollNo(inventory) }),
     };
-    if (!acc[key]) acc[key] = { name: bill.partyName, type: bill.billType, entries: [] };
-    acc[key].entries.push(entry);
-    return acc;
-  }, {});
+    const saved = await addInventory(payload);
+    setInventory(prev => [saved, ...prev]);
+    return saved;
+  };
 
-  const saveBill = async (billData) => {
-    try {
-      // 1. Pehle normal bill save hoga
-      const saved = await addBill(billData);
-      setBills(prev => [saved, ...prev]);
-
-      // 2. AUTO-LEDGER LOGIC (Naya Code)
-      try {
-        // Sale Bill = Debit (Paisa lena hai) | Purchase Bill = Credit (Paisa dena hai)
-        const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
-        
-        await addLedgerEntry({
-          party_name:   saved.partyName,
-          party_type:   saved.billType || 'Sale',
-          entry_type:   entryType,
-          description:  `Auto Generated Bill - Total Items: ${saved.items?.length || 0}`,
-          amount:       parseFloat(saved.grandTotal) || 0,
-          date:         saved.date || new Date().toLocaleDateString('en-GB'),
-          ref_bill_no:  saved.billNo,
-          bill_id:      saved._id // Ye database link ke liye
-        });
-      } catch (ledgerError) {
-        console.error('Auto Ledger Entry failed:', ledgerError);
-      }
-
-      return saved._id;
-    } catch (err) {
-      console.error('saveBill error:', err);
+  // adjustStock — used by Production (delta can be + or -)
+  const adjustStock = async (item, field, delta) => {
+    if (!item) return;
+    const id = item._id || item.id;
+    if (!id) return;
+    const live = inventory.find(i => i._id === id || i.id === id);
+    const curr = Number(live ? (live[field] || 0) : (item[field] || 0));
+    const next = parseFloat((curr + delta).toFixed(4));
+    if (next <= 0) {
+      await deleteInventory(id);
+      setInventory(prev => prev.filter(i => i._id !== id && i.id !== id));
+    } else {
+      const upd = await updateInventory(id, { [field]: next });
+      setInventory(prev => prev.map(i => (i._id === id || i.id === id) ? { ...i, ...upd } : i));
     }
   };
 
-  const updateBillData = async (id, updatedBill) => {
-    try {
-      const updated = await updateBill(id, updatedBill);
-      setBills(prev => prev.map(b => b._id === id ? updated : b));
-    } catch (err) {
-      console.error('updateBill error:', err);
+  // issueYards — Jambo files issue/minus yards
+  const issueYards = async (id, qty) => {
+    const item = inventory.find(i => i._id === id);
+    if (!item) return;
+    const next = parseFloat(((Number(item.yards) || 0) - qty).toFixed(4));
+    if (next <= 0) {
+      await deleteInventory(id);
+      setInventory(prev => prev.filter(i => i._id !== id));
+    } else {
+      const upd = await updateInventory(id, { yards: next });
+      setInventory(prev => prev.map(i => i._id === id ? { ...i, ...upd } : i));
     }
   };
 
-  const deleteBillData = async (id) => {
-    try {
-      await deleteBill(id);
-      setBills(prev => prev.filter(b => b._id !== id));
-    } catch (err) {
-      console.error('deleteBill error:', err);
+  // editItemYards — set yards directly
+  const editItemYards = async (id, newYards) => {
+    const upd = await updateInventory(id, { yards: Number(newYards) });
+    setInventory(prev => prev.map(i => i._id === id ? { ...i, ...upd } : i));
+  };
+
+  // updateStock — Core/Carton qty adjust
+  const updateStock = async (id, delta) => {
+    const item = inventory.find(i => i._id === id);
+    if (!item) return;
+    const next = Math.max(0, (Number(item.qty) || 0) + delta);
+    if (next <= 0) {
+      await deleteInventory(id);
+      setInventory(prev => prev.filter(i => i._id !== id));
+    } else {
+      const upd = await updateInventory(id, { qty: next });
+      setInventory(prev => prev.map(i => i._id === id ? { ...i, ...upd } : i));
     }
+  };
+
+  // removeItem — permanent delete
+  const removeItem = async (id) => {
+    await deleteInventory(id);
+    setInventory(prev => prev.filter(i => i._id !== id));
   };
 
   return (
-    <AccountsContext.Provider value={{
-      bills, parties, loading,
-      saveBill,
-      updateBill: updateBillData,
-      deleteBill: deleteBillData
+    <StockContext.Provider value={{
+      inventory, loading,
+      addRoll, adjustStock,
+      issueYards, editItemYards,
+      updateStock, removeItem,
+      refreshInventory, setInventory,
     }}>
       {children}
-    </AccountsContext.Provider>
+    </StockContext.Provider>
   );
 };
