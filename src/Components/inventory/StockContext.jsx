@@ -5,78 +5,54 @@ export const StockContext = createContext();
 export const useStock = () => useContext(StockContext);
 
 const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
-const NOTIF_STORAGE_KEY = 'erp_notifications';
 
 export const StockProvider = ({ children }) => {
   const [inventory, setInventory] = useState([]);
   const [loading,   setLoading]   = useState(true);
-  
-  // Notification State
+
+  // --- NEW: Notification Center State ---
   const [notifications, setNotifications] = useState(() => {
-    const saved = localStorage.getItem(NOTIF_STORAGE_KEY);
+    const saved = localStorage.getItem('erp_notifications');
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Persist notifications to local storage
   useEffect(() => {
-    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifications));
+    localStorage.setItem('erp_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
-  const refreshInventory = useCallback(async () => {
-    setLoading(true);
-    try { 
-      const data = await getInventory();
-      setInventory(data); 
-    }
-    catch (e) { console.error('refresh error:', e); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { refreshInventory(); }, [refreshInventory]);
-
-  // --- NOTIFICATION HELPERS ---
-  const addNotification = useCallback((message, type, itemDetails) => {
-    const id = Date.now();
+  const addNotification = (message, type, item) => {
     const newNotif = {
-      id,
+      id: Date.now(),
       message,
-      type, // 'warning' (10), 'critical' (5), 'error' (0)
-      details: itemDetails, // { brand, size, type }
-      time: new Date().toLocaleTimeString(),
+      type, // 'warning', 'critical', 'error'
+      item: { brand: item.brand, type: item.cartonType || item.type, size: item.size },
+      time: new Date().toLocaleString(),
       isRead: false
     };
     setNotifications(prev => [newNotif, ...prev]);
-  }, []);
+  };
 
   const dismissNotification = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  const clearAllNotifications = () => {
-    setNotifications([]);
-  };
-
-  // Check stock levels specifically for Cartons
   const checkLowStock = (item, nextQty) => {
     if (item.category !== 'Carton') return;
-
-    const details = {
-      brand: item.brand,
-      cartonType: item.cartonType || item.type,
-      size: item.size
-    };
-    const productLabel = `${details.brand} ${details.cartonType} (${details.size}")`;
-
-    if (nextQty === 0) {
-      addNotification(`${productLabel} is now OUT OF STOCK!`, 'error', details);
-    } else if (nextQty <= 5) {
-      addNotification(`CRITICAL WARNING: ${productLabel} reached ${nextQty} cartons.`, 'critical', details);
-    } else if (nextQty <= 10) {
-      addNotification(`LOW STOCK: ${productLabel} has only ${nextQty} left.`, 'warning', details);
-    }
+    const details = `${item.brand} ${item.cartonType || item.type} ${item.size}"`;
+    if (nextQty <= 0) addNotification(`OUT OF STOCK: ${details}`, 'error', item);
+    else if (nextQty <= 5) addNotification(`CRITICAL WARNING: ${details}`, 'critical', item);
+    else if (nextQty <= 10) addNotification(`LOW STOCK WARNING: ${details}`, 'warning', item);
   };
+  // --- END NEW ---
 
-  // --- EXISTING FUNCTIONALITY (WITH NOTIFICATION TRIGGERS) ---
+  const refreshInventory = useCallback(async () => {
+    setLoading(true);
+    try { setInventory(await getInventory()); }
+    catch (e) { console.error('refresh:', e); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { refreshInventory(); }, [refreshInventory]);
 
   const generateRollNo = (inv) => {
     const nums = inv
@@ -95,11 +71,6 @@ export const StockProvider = ({ children }) => {
     };
     const saved = await addInventory(payload);
     setInventory(prev => [saved, ...prev]);
-    
-    // Check stock if it's a carton being added (though usually addition doesn't trigger low stock, 
-    // it's good to have it synced)
-    if (saved.category === 'Carton') checkLowStock(saved, Number(saved.qty));
-    
     return saved;
   };
 
@@ -111,14 +82,15 @@ export const StockProvider = ({ children }) => {
     const curr = Number(live ? (live[field] || 0) : (item[field] || 0));
     const next = parseFloat((curr + delta).toFixed(4));
     
+    // Low stock check
+    if (field === 'qty') checkLowStock(item, next);
+
     if (next <= 0) {
       await deleteInventory(id);
       setInventory(prev => prev.filter(i => i._id !== id && i.id !== id));
-      if (item.category === 'Carton' && field === 'qty') checkLowStock(item, 0);
     } else {
       const upd = await updateInventory(id, { [field]: next });
       setInventory(prev => prev.map(i => (i._id === id || i.id === id) ? { ...i, ...upd } : i));
-      if (item.category === 'Carton' && field === 'qty') checkLowStock(item, next);
     }
   };
 
@@ -145,14 +117,15 @@ export const StockProvider = ({ children }) => {
     if (!item) return;
     const next = Math.max(0, (Number(item.qty) || 0) + delta);
     
+    // Low stock check
+    checkLowStock(item, next);
+
     if (next <= 0) {
       await deleteInventory(id);
       setInventory(prev => prev.filter(i => i._id !== id));
-      checkLowStock(item, 0);
     } else {
       const upd = await updateInventory(id, { qty: next });
       setInventory(prev => prev.map(i => i._id === id ? { ...i, ...upd } : i));
-      checkLowStock(item, next);
     }
   };
 
@@ -163,19 +136,12 @@ export const StockProvider = ({ children }) => {
 
   return (
     <StockContext.Provider value={{
-      inventory, 
-      loading,
-      notifications, // Notification Center support
-      addRoll, 
-      adjustStock,
-      issueYards, 
-      editItemYards,
-      updateStock, 
-      removeItem,
-      dismissNotification, // Action to dismiss
-      clearAllNotifications,
-      refreshInventory, 
-      setInventory,
+      inventory, loading,
+      notifications, dismissNotification, // New Notification Exports
+      addRoll, adjustStock,
+      issueYards, editItemYards,
+      updateStock, removeItem,
+      refreshInventory, setInventory,
     }}>
       {children}
     </StockContext.Provider>
