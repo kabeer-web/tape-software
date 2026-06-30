@@ -1,6 +1,8 @@
 import { createContext, useState, useEffect, useContext } from 'react';
-// Correct Path: ../../../api
-import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from "../../api";
+import {
+  getBills, addBill, updateBill, deleteBill,
+  addLedgerEntry
+} from '../../../api';
 
 export const AccountsContext = createContext(null);
 
@@ -11,7 +13,7 @@ export const useAccounts = () => {
 };
 
 export const AccountsProvider = ({ children }) => {
-  const [bills, setBills] = useState([]);
+  const [bills,   setBills]   = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,39 +29,38 @@ export const AccountsProvider = ({ children }) => {
     const totalCarton = bill.items?.reduce((s, i) =>
       s + (parseFloat(i.totalCarton) || parseFloat(i.qty) || 0), 0) || 0;
     const entry = {
-      billId: bill._id,
-      billNo: bill.billNo,
-      date: bill.date,
-      totalCarton,
-      grandTotal: bill.grandTotal
+      billId: bill._id, billNo: bill.billNo,
+      date: bill.date, totalCarton, grandTotal: bill.grandTotal
     };
     if (!acc[key]) acc[key] = { name: bill.partyName, type: bill.billType, entries: [] };
     acc[key].entries.push(entry);
     return acc;
   }, {});
 
+  // ✅ Bill save + auto ledger entry (bill_id se link hoti hai)
   const saveBill = async (billData) => {
     try {
       const saved = await addBill(billData);
       setBills(prev => [saved, ...prev]);
 
-      try {
-        const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
-        // addLedgerEntry yahan defined hai kyunke upar import kiya hai
-        await addLedgerEntry({
-          party_name:   saved.partyName,
-          party_type:   saved.billType || 'Sale',
-          entry_type:   entryType,
-          description:  `Auto Bill Entry - Bill No: ${saved.billNo}`,
-          amount:       parseFloat(saved.grandTotal) || 0,
-          date:         saved.date || new Date().toLocaleDateString('en-GB'),
-          ref_bill_no:  saved.billNo,
-          bill_id:      saved._id 
-        });
-        console.log("✅ Ledger updated!");
-      } catch (ledgerErr) {
-        console.error("❌ Ledger failed:", ledgerErr);
+      if (saved.partyName && saved.grandTotal > 0) {
+        try {
+          const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
+          await addLedgerEntry({
+            party_name:  saved.partyName,
+            party_type:  saved.billType || 'Sale',
+            entry_type:  entryType,
+            description: `Bill #${saved.billNo || '—'} — ${saved.billType} Invoice`,
+            amount:      saved.grandTotal,
+            date:        saved.date,
+            ref_bill_no: saved.billNo || '',
+            bill_id:     saved._id,
+          });
+        } catch (ledgerErr) {
+          console.error('Auto ledger entry failed:', ledgerErr);
+        }
       }
+
       return saved._id;
     } catch (err) {
       console.error('saveBill error:', err);
@@ -71,20 +72,22 @@ export const AccountsProvider = ({ children }) => {
     try {
       const updated = await updateBill(id, updatedBill);
       setBills(prev => prev.map(b => b._id === id ? updated : b));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error('updateBill error:', err); }
   };
 
   const deleteBillData = async (id) => {
     try {
       await deleteBill(id);
       setBills(prev => prev.filter(b => b._id !== id));
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error('deleteBill error:', err); }
   };
 
   return (
     <AccountsContext.Provider value={{
-      bills, parties, loading, saveBill,
-      updateBill: updateBillData, deleteBill: deleteBillData
+      bills, parties, loading,
+      saveBill,
+      updateBill: updateBillData,
+      deleteBill: deleteBillData,
     }}>
       {children}
     </AccountsContext.Provider>
