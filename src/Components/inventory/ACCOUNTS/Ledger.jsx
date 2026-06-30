@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   getLedgerEntries, addLedgerEntry, updateLedgerEntry, deleteLedgerEntry 
 } from "../../../api";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, Plus, Trash2, Pencil, Search, Filter, Calendar, 
   ArrowUpRight, ArrowDownLeft, Wallet, ChevronLeft, 
