@@ -22,8 +22,7 @@ export const addLedgerEntry = async (entry) => {
 };
 
 export const updateLedgerEntry = async (id, updates) => {
-  const { data, error } = await supabase.from('ledger_entries')
-    .update(updates).eq('id', id).select().single();
+  const { data, error } = await supabase.from('ledger_entries').update(updates).eq('id', id).select().single();
   if (error) throw new Error(error.message);
   return { ...data, _id: data.id };
 };
@@ -59,7 +58,6 @@ export const getInventoryByRoll = async (rollNo) => {
 
   const { data: all } = await supabase.from('inventory').select('*').not('category', 'in', '("Core","Carton")');
   const found = (all || []).find(i => (String(i.roll_no || '').replace(/^0+/, '') || '0') === stripped);
-  
   if (found) return { ...found, _id: found.id, rollNo: found.roll_no };
   return null;
 };
@@ -98,6 +96,22 @@ export const deleteInventory = async (id) => {
   return true;
 };
 
+// CRITICAL: Stock Sync for Invoices
+export const syncProductStock = async (brand, size, type, qtyDelta) => {
+  const { data: items } = await supabase.from('inventory')
+    .select('*')
+    .ilike('brand', brand)
+    .ilike('size', size);
+
+  if (items && items.length > 0) {
+    const item = items[0];
+    const newQty = Math.max(0, (Number(item.qty) || 0) + qtyDelta);
+    await supabase.from('inventory').update({ qty: newQty }).eq('id', item.id);
+    return true;
+  }
+  return false;
+};
+
 // ─── BILLS API ──────────────────────────────────────────
 export const getBills = async () => {
   const { data, error } = await supabase.from('bills').select('*').order('created_at', { ascending: false });
@@ -106,33 +120,30 @@ export const getBills = async () => {
 };
 
 export const addBill = async (bill) => {
+  const { data: lastBill } = await supabase.from('bills').select('bill_no').order('bill_no', { ascending: false }).limit(1).maybeSingle();
+  const nextBillNo = lastBill ? Number(lastBill.bill_no) + 1 : 1001;
+
   const payload = {
+    bill_no: nextBillNo,
     bill_type: bill.billType || 'Sale',
-    bill_no: bill.billNo || '',
-    party_name: bill.partyName || '',
+    party_name: bill.partyName,
     date: bill.date || new Date().toLocaleDateString('en-GB'),
-    grand_total: Number(bill.grandTotal) || 0,
     items: bill.items || [],
     total_carton_count: Number(bill.totalCartonCount) || 0,
-    carton_used: bill.cartonUsed || null,
-    logo: bill.logo || null,
+    grand_total: Number(bill.grandTotal) || 0,
+    vehicle_no: bill.vehicleNo || '',
+    receiver_name: bill.receiverName || '',
+    amount_in_words: bill.amountInWords || ''
   };
   const { data, error } = await supabase.from('bills').insert([payload]).select().single();
   if (error) throw new Error(error.message);
-  return { ...data, _id: data.id, billNo: data.bill_no, partyName: data.party_name };
+  return { ...data, _id: data.id };
 };
 
 export const updateBill = async (id, bill) => {
-  const { data, error } = await supabase.from('bills').update({
-    bill_no: bill.billNo,
-    party_name: bill.partyName,
-    date: bill.date,
-    grand_total: Number(bill.grandTotal) || 0,
-    items: bill.items || [],
-    total_carton_count: Number(bill.totalCartonCount) || 0,
-  }).eq('id', id).select().single();
+  const { data, error } = await supabase.from('bills').update(bill).eq('id', id).select().single();
   if (error) throw new Error(error.message);
-  return { ...data, _id: data.id, billNo: data.bill_no };
+  return { ...data, _id: data.id };
 };
 
 export const deleteBill = async (id) => {
