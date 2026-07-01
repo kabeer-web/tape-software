@@ -1,205 +1,215 @@
-import { useState, useRef, useContext, useEffect, useMemo } from 'react';
-import { 
-  Plus, Trash2, Printer, Upload, X, Hash, Calendar, 
-  Search, ChevronDown, CheckCircle2, DollarSign
-} from 'lucide-react';
-import { useAccounts } from '../ACCOUNTS/AccountsContext';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Printer, Save, Hash, User, Truck, Package, X, ChevronDown } from 'lucide-react';
+import { addBill, syncProductStock } from '../../../api';
+import { useStock } from '../StockContext';
 
-const SALE_PARTIES = ['AR PACKAGES','ROSHAN TRADER','HUZAIFA TRADER','SHAMS STATIONARY','ABDUL RAUF','HAMZULLAH','ANEES STATIONARY','A ONE','ZEESHAN HYD','ABDUL BASIT','MD TRADERS','MUNEER BHAI','ANWAR BHAI','FAROOQ BHAI','GR TRADER','HAMZA SIALKOT','HASHMI TRADER','GAIN TEX INTERNATIONAL','NAQI TAQI','MEMON ELECTRIC','MOK PAKistan TRADER','SABIR BROTHER 1','SABIR BROTHER 2','SHERAZ HABIB','SANAULLAH TEXTILE','SUJJAD ALI','USAMA STATIONARY','ZEESHAN HAIDRABAD','WAHEED WALI','AL FAREED','SHOKAT HAYAT','GUL AMIR','AJ ARSALAN','HAS GR TRADER','MUDASIR MEMON','UMAIR FISHERY','AMEER AKBAR','ISMAIL BHAI','BILAL BHAI','FARHAN NEW KARACHI','N.K ENTERPRISES'];
-
-// --- RESTORED SEARCHABLE PARTY PICKER ---
-const PartyPicker = ({ value, onChange, options, placeholder }) => {
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef(null);
-  const filtered = options.filter(o => o.toLowerCase().includes(value.toLowerCase()));
-
-  return (
-    <div className="relative" ref={boxRef}>
-      <div className="relative">
-        <input 
-          value={value} onChange={e => { onChange(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)} placeholder={placeholder}
-          className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl outline-none focus:border-emerald-500 font-bold text-sm"
-        />
-        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" size={16}/>
-      </div>
-      {open && (
-        <div className="absolute z-[3000] mt-2 w-full max-h-60 overflow-y-auto bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl">
-          {filtered.map(o => (
-            <button key={o} onClick={() => { onChange(o); setOpen(false); }} className="w-full text-left p-4 hover:bg-emerald-500 hover:text-black transition-colors text-xs font-bold border-b border-white/5">
-              {o}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+// --- NUMBER TO WORDS HELPER ---
+const amountToWords = (num) => {
+    const a = ['','One ','Two ','Three ','Four ','Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
+    const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    if ((num = num.toString()).length > 9) return 'overflow';
+    let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return ''; 
+    let str = '';
+    str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+    str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+    str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+    str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+    str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + 'Only ' : '';
+    return str.toUpperCase();
 };
 
 export default function SaleInvoice() {
-  const { saveBill } = useAccounts();
-  const [billNo, setBillNo] = useState('');
-  const [buyerName, setBuyerName] = useState('');
-  const [date, setDate] = useState(new Date().toLocaleDateString('en-GB'));
-  const [rows, setRows] = useState([]);
-  const [logo, setLogo] = useState(localStorage.getItem('erp_logo') || null);
-  const [popMsg, setPopMsg] = useState('');
-  const fileRef = useRef(null);
+  const { inventory } = useStock();
+  const [loading, setLoading] = useState(false);
+  
+  // Invoice Header State
+  const [header, setHeader] = useState({
+    partyName: '',
+    vehicleNo: '',
+    receiverName: '',
+    date: new Date().toISOString().split('T')[0]
+  });
 
-  // Form for Entry
-  const [form, setFormData] = useState({ description: '', debit: '', credit: '' });
+  // Items State
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState({
+    brand: '', type: '', size: '', color: '', height: '', mic: '', cartons: '', perCtn: '', rate: ''
+  });
+
+  // Calculations
+  const totals = useMemo(() => {
+    const grandTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const totalCartons = items.reduce((sum, item) => sum + Number(item.cartons), 0);
+    return { grandTotal, totalCartons, amountInWords: amountToWords(grandTotal) };
+  }, [items]);
 
   const addItem = () => {
-    if (!form.description || (!form.debit && !form.credit)) return;
-    const newId = rows.length + 1;
+    if (!form.brand || !form.cartons || !form.rate) return;
+    const qty = Number(form.cartons) * Number(form.perCtn || 1);
+    const lineTotal = qty * Number(form.rate);
     
-    // Running Total Logic like Bank Statement
-    let lastTotal = rows.length > 0 ? rows[rows.length - 1].runningTotal : 0;
-    const debit = Number(form.debit) || 0;
-    const credit = Number(form.credit) || 0;
-    const currentTotal = lastTotal + debit - credit;
-
-    setRows([...rows, { 
-      id: newId, 
-      date: date,
-      description: form.description, 
-      debit, 
-      credit, 
-      runningTotal: currentTotal 
-    }]);
-    setFormData({ description: '', debit: '', credit: '' });
+    setItems([...items, { ...form, qty, lineTotal, id: crypto.randomUUID() }]);
+    setForm({ brand: '', type: '', size: '', color: '', height: '', mic: '', cartons: '', perCtn: '', rate: '' });
   };
 
-  const printA4 = () => {
-    const html = `
-      <html>
-        <head>
-          <style>
-            @page { size: A4; margin: 10mm; }
-            body { font-family: 'Helvetica', sans-serif; padding: 20px; }
-            .bank-header { text-align: center; color: red; font-size: 30px; font-weight: 900; text-transform: uppercase; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            th { border: 1px solid #000; padding: 10px; background: #f0f0f0; font-size: 14px; font-weight: bold; text-align: left; }
-            td { border: 1px solid #000; padding: 8px; font-size: 13px; }
-            .text-right { text-align: right; }
-            .header-info { display: flex; justify-content: space-between; margin-bottom: 10px; }
-          </style>
-        </head>
-        <body onload="window.print()">
-          <div class="bank-header">BANK ACCOUNT JUNE</div>
-          <div class="header-info">
-             <div><b>PARTY:</b> ${buyerName}</div>
-             <div><b>BILL NO:</b> #${billNo}</div>
-             <div><b>DATE:</b> ${date}</div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>ID NO</th><th>DATE</th><th>PARTY&FACTORY</th><th>CASH & CHQ</th><th>DEBIT</th><th>CREDIT</th><th>TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map(r => `
-                <tr>
-                  <td>${r.id}</td>
-                  <td>${r.date}</td>
-                  <td>${buyerName}</td>
-                  <td>${r.description}</td>
-                  <td class="text-right">${r.debit || ''}</td>
-                  <td class="text-right">${r.credit || ''}</td>
-                  <td class="text-right"><b>${r.runningTotal}</b></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </body>
-      </html>`;
-    const win = window.open('', '_blank');
-    win.document.write(html);
-    win.document.close();
+  const saveInvoice = async () => {
+    if (!header.partyName || items.length === 0) return alert("Select Party and Add Items!");
+    setLoading(true);
+    try {
+      // 1. Save Bill to Supabase
+      const billData = { ...header, items, ...totals };
+      const savedBill = await addBill(billData);
+
+      // 2. Reduce Stock for each item (Inventory Sync)
+      for (const item of items) {
+        await syncProductStock(item.brand, item.size, item.type, -item.qty);
+      }
+
+      alert(`Invoice #${savedBill.bill_no} Saved & Stock Updated!`);
+      setItems([]);
+      setHeader({ partyName: '', vehicleNo: '', receiverName: '', date: new Date().toISOString().split('T')[0] });
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#070707] text-white p-8 font-sans">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#070707] text-white p-4 md:p-8">
+      <div className="max-w-7xl mx-auto print:max-w-none print:p-0">
         
-        {/* Header Section */}
-        <div className="flex justify-between items-center mb-10">
-          <h1 className="text-5xl font-black italic tracking-tighter uppercase">Sales <span className="text-emerald-500 text-6xl">Statement</span></h1>
+        {/* Actions Bar (Hidden in Print) */}
+        <div className="flex justify-between items-center mb-8 print:hidden">
+          <h1 className="text-4xl font-black italic text-emerald-500 uppercase tracking-tighter">Sales Invoice</h1>
           <div className="flex gap-4">
-             <button onClick={printA4} className="bg-emerald-500 text-black px-10 py-4 rounded-2xl font-black text-xs uppercase flex items-center gap-2 shadow-xl shadow-emerald-500/20 hover:scale-105 transition-all"><Printer size={18}/> Print A4 Ledger</button>
-             <button onClick={() => {}} className="bg-white/5 border border-white/10 px-8 py-4 rounded-2xl font-black text-xs uppercase hover:bg-white hover:text-black transition-all">Save to Database</button>
+            <button onClick={() => window.print()} className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-white/10 transition-all font-bold">
+              <Printer size={18}/> Print A4
+            </button>
+            <button onClick={saveInvoice} disabled={loading} className="bg-emerald-500 text-black px-10 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 transition-all font-black uppercase">
+              <Save size={18}/> {loading ? 'Saving...' : 'Save & Sync'}
+            </button>
           </div>
         </div>
 
-        {/* Party & Bill Details */}
-        <div className="bg-white/[0.03] border border-white/10 p-10 rounded-[3rem] grid grid-cols-1 md:grid-cols-3 gap-10 backdrop-blur-xl mb-10">
-           <div className="space-y-4">
-              <label className="text-[10px] font-black text-gray-500 ml-4 uppercase tracking-[0.2em]">Select Buyer Account</label>
-              <PartyPicker value={buyerName} onChange={setBuyerName} options={SALE_PARTIES} placeholder="BUYER NAME" />
-           </div>
-           <div className="space-y-4">
-              <label className="text-[10px] font-black text-gray-500 ml-4 uppercase tracking-[0.2em]">Invoice Details</label>
-              <div className="relative">
-                <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={16}/>
-                <input value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="INVOICE NO" className="w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-2xl outline-none font-bold" />
-              </div>
-           </div>
-           <div className="bg-emerald-500/10 rounded-[2.5rem] p-8 border border-emerald-500/20 text-center flex flex-col justify-center">
-              <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Final Closing Balance</span>
-              <span className="text-5xl font-black tracking-tighter">Rs. {rows.length > 0 ? rows[rows.length-1].runningTotal.toLocaleString() : '0'}</span>
-           </div>
-        </div>
+        {/* Invoice Container (A4 Look) */}
+        <div className="bg-[#0c0c0c] border border-white/10 rounded-[2.5rem] p-10 shadow-2xl print:bg-white print:text-black print:border-0 print:p-0 print:rounded-none">
+          
+          {/* Header Section */}
+          <div className="flex justify-between items-start mb-12 pb-8 border-b border-white/5 print:border-black">
+            <div>
+              <h2 className="text-4xl font-black italic text-emerald-500 mb-2">BEER<span className="text-white print:text-black">FLOW</span></h2>
+              <p className="text-xs text-gray-500 font-bold tracking-widest uppercase">Premium Tape Solutions</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500 uppercase font-black tracking-widest mb-1">Invoice Date</p>
+              <input type="date" value={header.date} onChange={e => setHeader({...header, date: e.target.value})} className="bg-transparent text-right font-bold outline-none border-b border-white/10 focus:border-emerald-500 print:border-0" />
+            </div>
+          </div>
 
-        {/* Input Row - Exact style of your Ledger table inputs */}
-        <div className="bg-white/[0.02] border border-white/5 p-8 rounded-[2.5rem] grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 items-end shadow-2xl">
-           <div className="space-y-2">
-              <label className="text-[9px] font-black text-gray-500 ml-2 uppercase">Cash & CHQ Details</label>
-              <input value={form.description} onChange={e=>setFormData({...form, description: e.target.value})} placeholder="e.g. CHQ CLEAR / CASH REC" className="w-full bg-black border border-white/10 p-4 rounded-xl text-sm font-bold" />
-           </div>
-           <div className="space-y-2">
-              <label className="text-[9px] font-black text-red-500 ml-2 uppercase tracking-widest">Debit (+)</label>
-              <input type="number" value={form.debit} onChange={e=>setFormData({...form, debit: e.target.value})} placeholder="BILL AMOUNT" className="w-full bg-black border border-red-500/20 p-4 rounded-xl text-sm font-black text-red-500" />
-           </div>
-           <div className="space-y-2">
-              <label className="text-[9px] font-black text-emerald-500 ml-2 uppercase tracking-widest">Credit (-)</label>
-              <input type="number" value={form.credit} onChange={e=>setFormData({...form, credit: e.target.value})} placeholder="PAYMENT REC" className="w-full bg-black border border-emerald-500/20 p-4 rounded-xl text-sm font-black text-emerald-500" />
-           </div>
-           <button onClick={addItem} className="h-[54px] bg-white text-black font-black rounded-2xl hover:bg-emerald-500 transition-all uppercase text-[10px] tracking-widest shadow-xl">Add Entry</button>
-        </div>
+          {/* Customer Details Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12 print:grid-cols-3">
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Buyer Details</label>
+              <input placeholder="Buyer Name" value={header.partyName} onChange={e => setHeader({...header, partyName: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-emerald-500 font-bold print:bg-transparent print:border-0 print:p-0" />
+            </div>
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Vehicle Number</label>
+              <input placeholder="Ex: ABC-123" value={header.vehicleNo} onChange={e => setHeader({...header, vehicleNo: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-emerald-500 font-bold print:bg-transparent print:border-0 print:p-0" />
+            </div>
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Receiver Name</label>
+              <input placeholder="Name" value={header.receiverName} onChange={e => setHeader({...header, receiverName: e.target.value})} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl outline-none focus:border-emerald-500 font-bold print:bg-transparent print:border-0 print:p-0" />
+            </div>
+          </div>
 
-        {/* Bank Style Table */}
-        <div className="bg-[#111] rounded-[3.5rem] border border-white/5 overflow-hidden shadow-inner">
-           <table className="w-full text-left border-separate border-spacing-0">
-              <thead className="sticky top-0 bg-[#1a1a1a] z-50">
-                 <tr>
-                    <th className="p-8 text-[10px] font-black text-gray-400 uppercase border-b border-white/5">ID NO</th>
-                    <th className="p-8 text-[10px] font-black text-gray-400 uppercase border-b border-white/5">DATE</th>
-                    <th className="p-8 text-[10px] font-black text-gray-400 uppercase border-b border-white/5">PARTY&FACTORY</th>
-                    <th className="p-8 text-[10px] font-black text-gray-400 uppercase border-b border-white/5">CASH & CHQ</th>
-                    <th className="p-8 text-[10px] font-black text-gray-400 uppercase border-b border-white/5 text-right">DEBIT</th>
-                    <th className="p-8 text-[10px] font-black text-gray-400 uppercase border-b border-white/5 text-right">CREDIT</th>
-                    <th className="p-8 text-[10px] font-black text-gray-400 uppercase border-b border-white/5 text-right">TOTAL</th>
-                    <th className="p-8 border-b border-white/5"></th>
-                 </tr>
+          {/* Item Entry Form (Hidden in Print) */}
+          <div className="bg-white/[0.02] border border-white/5 p-8 rounded-[2rem] mb-12 print:hidden">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+              <input placeholder="Brand" list="brands" value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="Type" value={form.type} onChange={e => setForm({...form, type: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="Size" value={form.size} onChange={e => setForm({...form, size: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="Color" value={form.color} onChange={e => setForm({...form, color: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="Height" value={form.height} onChange={e => setForm({...form, height: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="MIC" value={form.mic} onChange={e => setForm({...form, mic: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="Cartons" type="number" value={form.cartons} onChange={e => setForm({...form, cartons: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="Per CTN" type="number" value={form.perCtn} onChange={e => setForm({...form, perCtn: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <input placeholder="Rate" type="number" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})} className="bg-black border border-white/10 p-3 rounded-xl text-sm" />
+              <button onClick={addItem} className="bg-emerald-500 text-black font-black rounded-xl text-[10px] uppercase tracking-widest hover:bg-emerald-400">Add Entry</button>
+            </div>
+            <datalist id="brands">
+              {[...new Set(inventory.map(i => i.brand))].map(b => <option key={b} value={b} />)}
+            </datalist>
+          </div>
+
+          {/* ERP Table */}
+          <div className="overflow-hidden rounded-3xl border border-white/5 mb-12 print:border-black print:rounded-none">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-white/5 print:bg-transparent">
+                <tr className="text-[10px] font-black text-gray-500 uppercase tracking-widest print:text-black">
+                  <th className="p-5 border-b border-white/5 print:border-black">Description</th>
+                  <th className="p-5 border-b border-white/5 print:border-black text-center">Specs</th>
+                  <th className="p-5 border-b border-white/5 print:border-black text-center">CTN</th>
+                  <th className="p-5 border-b border-white/5 print:border-black text-center">Qty</th>
+                  <th className="p-5 border-b border-white/5 print:border-black text-right">Rate</th>
+                  <th className="p-5 border-b border-white/5 print:border-black text-right">Total</th>
+                  <th className="p-5 border-b border-white/5 print:hidden"></th>
+                </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
-                {rows.map((r, i) => (
-                  <tr key={r.id} className="hover:bg-white/[0.02] transition-colors group">
-                    <td className="p-8 font-mono text-xs text-gray-500">{r.id}</td>
-                    <td className="p-8 font-mono text-xs text-gray-500">{r.date}</td>
-                    <td className="p-8 font-black text-sm uppercase text-gray-200">{buyerName}</td>
-                    <td className="p-8 text-sm font-bold uppercase text-gray-400">{r.description}</td>
-                    <td className="p-8 text-right font-black text-red-500 text-lg">{r.debit > 0 ? r.debit.toLocaleString() : ''}</td>
-                    <td className="p-8 text-right font-black text-emerald-500 text-lg">{r.credit > 0 ? r.credit.toLocaleString() : ''}</td>
-                    <td className="p-8 text-right font-black text-2xl tracking-tighter text-white">Rs. {r.runningTotal.toLocaleString()}</td>
-                    <td className="p-8 text-right">
-                       <button onClick={()=>setRows(rows.filter(x=>x.id!==r.id))} className="text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18}/></button>
+              <tbody className="divide-y divide-white/5 print:divide-black">
+                {items.map((item, idx) => (
+                  <tr key={item.id} className="text-sm font-bold print:text-black">
+                    <td className="p-5">
+                        <p>{item.brand} - {item.type}</p>
+                        <p className="text-[10px] text-gray-500">{item.color}</p>
+                    </td>
+                    <td className="p-5 text-center text-xs">{item.size} / {item.mic} / {item.height}</td>
+                    <td className="p-5 text-center">{item.cartons} <small className="opacity-40">CTN</small></td>
+                    <td className="p-5 text-center">{item.qty} <small className="opacity-40">U</small></td>
+                    <td className="p-5 text-right font-mono">{Number(item.rate).toLocaleString()}</td>
+                    <td className="p-5 text-right font-black text-emerald-500 print:text-black">{item.lineTotal.toLocaleString()}</td>
+                    <td className="p-5 text-right print:hidden">
+                      <button onClick={() => setItems(items.filter(i => i.id !== item.id))} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-all">
+                        <Trash2 size={16}/>
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
-           </table>
+            </table>
+          </div>
+
+          {/* Footer Logic */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-end">
+            <div className="space-y-6">
+                <div>
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Amount in Words</p>
+                  <p className="text-sm font-black italic text-emerald-500 print:text-black">{totals.amountInWords}</p>
+                </div>
+                <div className="pt-8 border-t border-white/5 print:border-black flex gap-20">
+                    <div className="text-center">
+                        <div className="w-32 border-b border-white/20 mb-2 print:border-black"></div>
+                        <p className="text-[9px] font-black text-gray-500 uppercase">Authorized Sign</p>
+                    </div>
+                    <div className="text-center">
+                        <div className="w-32 border-b border-white/20 mb-2 print:border-black"></div>
+                        <p className="text-[9px] font-black text-gray-500 uppercase">Receiver Sign</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div className="bg-white/5 p-8 rounded-[2.5rem] space-y-4 print:bg-transparent print:p-0">
+               <div className="flex justify-between text-gray-500 font-bold uppercase text-[10px]">
+                  <span>Total Cartons</span>
+                  <span className="text-white print:text-black">{totals.totalCartons} CTN</span>
+               </div>
+               <div className="flex justify-between items-center pt-4 border-t border-white/5 print:border-black">
+                  <span className="text-sm font-black uppercase">Grand Total</span>
+                  <span className="text-4xl font-black text-emerald-500 print:text-black">Rs. {totals.grandTotal.toLocaleString()}</span>
+               </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
