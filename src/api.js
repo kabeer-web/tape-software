@@ -4,7 +4,6 @@ import { supabase } from './supabase';
 export const getLedgerEntries = async (partyName) => {
   let q = supabase.from('ledger_entries').select('*').order('date', { ascending: false });
   if (partyName) {
-    // ilike makes search case-insensitive and flexible
     q = q.ilike('party_name', `%${partyName.trim()}%`);
   }
   const { data, error } = await q;
@@ -47,8 +46,25 @@ export const getInventory = async () => {
   }));
 };
 
+export const getInventoryByRoll = async (rollNo) => {
+  const trimmed = String(rollNo).trim();
+  const padded  = trimmed.padStart(3, '0');
+  const stripped = trimmed.replace(/^0+/, '') || '0';
+
+  const { data: d1 } = await supabase.from('inventory').select('*').eq('roll_no', trimmed).maybeSingle();
+  if (d1) return { ...d1, _id: d1.id, rollNo: d1.roll_no };
+
+  const { data: d2 } = await supabase.from('inventory').select('*').eq('roll_no', padded).maybeSingle();
+  if (d2) return { ...d2, _id: d2.id, rollNo: d2.roll_no };
+
+  const { data: all } = await supabase.from('inventory').select('*').not('category', 'in', '("Core","Carton")');
+  const found = (all || []).find(i => (String(i.roll_no || '').replace(/^0+/, '') || '0') === stripped);
+  
+  if (found) return { ...found, _id: found.id, rollNo: found.roll_no };
+  return null;
+};
+
 export const addInventory = async (item) => {
-  // Logic: Ensure all values are mapped correctly to Supabase Columns
   const payload = {
     category:    item.category    || null,
     type:        item.type        || item.category || null,
@@ -65,7 +81,6 @@ export const addInventory = async (item) => {
     carton_type: item.cartonType  || item.carton_type || null,
     size:        item.size        || null,
   };
-
   const { data, error } = await supabase.from('inventory').insert([payload]).select().single();
   if (error) throw new Error(error.message);
   return { ...data, _id: data.id, rollNo: data.roll_no, cartonType: data.carton_type };
@@ -74,7 +89,7 @@ export const addInventory = async (item) => {
 export const updateInventory = async (id, updates) => {
   const { data, error } = await supabase.from('inventory').update(updates).eq('id', id).select().single();
   if (error) throw new Error(error.message);
-  return { ...data, _id: data.id, rollNo: data.roll_no };
+  return { ...data, _id: data.id, rollNo: data.roll_no, cartonType: data.carton_type };
 };
 
 export const deleteInventory = async (id) => {
@@ -83,21 +98,97 @@ export const deleteInventory = async (id) => {
   return true;
 };
 
-// ─── BILLS, PARTIES & PRODUCTIONS ────────────────────────
+// ─── BILLS API ──────────────────────────────────────────
 export const getBills = async () => {
   const { data, error } = await supabase.from('bills').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map(b => ({ ...b, _id: b.id, billNo: b.bill_no, partyName: b.party_name }));
 };
 
+export const addBill = async (bill) => {
+  const payload = {
+    bill_type: bill.billType || 'Sale',
+    bill_no: bill.billNo || '',
+    party_name: bill.partyName || '',
+    date: bill.date || new Date().toLocaleDateString('en-GB'),
+    grand_total: Number(bill.grandTotal) || 0,
+    items: bill.items || [],
+    total_carton_count: Number(bill.totalCartonCount) || 0,
+    carton_used: bill.cartonUsed || null,
+    logo: bill.logo || null,
+  };
+  const { data, error } = await supabase.from('bills').insert([payload]).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id, billNo: data.bill_no, partyName: data.party_name };
+};
+
+export const updateBill = async (id, bill) => {
+  const { data, error } = await supabase.from('bills').update({
+    bill_no: bill.billNo,
+    party_name: bill.partyName,
+    date: bill.date,
+    grand_total: Number(bill.grandTotal) || 0,
+    items: bill.items || [],
+    total_carton_count: Number(bill.totalCartonCount) || 0,
+  }).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id, billNo: data.bill_no };
+};
+
+export const deleteBill = async (id) => {
+  const { error } = await supabase.from('bills').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+// ─── PARTIES API ─────────────────────────────────────────
 export const getParties = async () => {
   const { data, error } = await supabase.from('parties').select('*').order('name', { ascending: true });
   if (error) throw new Error(error.message);
   return (data || []).map(p => ({ ...p, _id: p.id }));
 };
 
+export const addParty = async (party) => {
+  const { data, error } = await supabase.from('parties').insert([party]).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const updateParty = async (id, party) => {
+  const { data, error } = await supabase.from('parties').update(party).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const deleteParty = async (id) => {
+  const { error } = await supabase.from('parties').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+// ─── PRODUCTIONS API ─────────────────────────────────────
 export const getProductions = async () => {
   const { data, error } = await supabase.from('productions').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []).map(p => ({ ...p, _id: p.id }));
+};
+
+export const addProduction = async (prod) => {
+  const { _id, id, created_at, ...rest } = prod;
+  const { data, error } = await supabase.from('productions').insert([rest]).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const updateProduction = async (id, prod) => {
+  const { _id, id: _i, created_at, ...rest } = prod;
+  const { data, error } = await supabase.from('productions').update(rest).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const deleteProduction = async (id) => {
+  const { error } = await supabase.from('productions').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
 };
