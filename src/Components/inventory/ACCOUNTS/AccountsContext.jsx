@@ -1,16 +1,16 @@
-import { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import { createContext, useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from '../../../api';
 
 export const AccountsContext = createContext(null);
 
 export const useAccounts = () => {
   const context = useContext(AccountsContext);
-  if (!context) throw new Error('useAccounts must be used within AccountsProvider');
+  if (!context) return { bills: [], partiesSummary: {}, loading: true }; // Safe fallback
   return context;
 };
 
 export const AccountsProvider = ({ children }) => {
-  const [bills, setBills] = useState([]); // Hamesha array rahega
+  const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const refreshBills = useCallback(async () => {
@@ -18,25 +18,27 @@ export const AccountsProvider = ({ children }) => {
       setLoading(true);
       const data = await getBills();
       setBills(Array.isArray(data) ? data : []);
-    } catch (e) { 
+    } catch (e) {
       console.error("Bills Load Error:", e);
       setBills([]);
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => { refreshBills(); }, [refreshBills]);
 
-  // SAFE Logic: Agar bills load na hon toh empty object return karega
-  const partiesSummary = (bills || []).reduce((acc, bill) => {
-    const name = bill.partyName?.trim().toUpperCase();
-    if (!name) return acc;
-    if (!acc[name]) acc[name] = { name, type: bill.billType, totalInvoices: 0, totalAmount: 0 };
-    acc[name].totalInvoices += 1;
-    acc[name].totalAmount += (Number(bill.grandTotal) || 0);
-    return acc;
-  }, {});
+  // Guaranteed Object: Kabhi undefined nahi hoga
+  const partiesSummary = useMemo(() => {
+    if (!Array.isArray(bills)) return {};
+    return bills.reduce((acc, bill) => {
+      const name = bill.partyName?.trim().toUpperCase();
+      if (!name) return acc;
+      if (!acc[name]) acc[name] = { name, type: bill.billType, totalAmount: 0 };
+      acc[name].totalAmount += (Number(bill.grandTotal) || 0);
+      return acc;
+    }, {});
+  }, [bills]);
 
   const saveBill = async (billData) => {
     try {
@@ -48,7 +50,7 @@ export const AccountsProvider = ({ children }) => {
           party_name:  saved.partyName.toUpperCase(),
           party_type:  saved.billType,
           entry_type:  isSale ? 'debit' : 'credit',
-          description: `INV-AUTO: Bill #${saved.billNo || '—'}`,
+          description: `AUTO: Bill #${saved.billNo || '—'}`,
           amount:      Number(saved.grandTotal),
           date:        saved.date,
           bill_id:     saved._id,
@@ -63,19 +65,8 @@ export const AccountsProvider = ({ children }) => {
 
   return (
     <AccountsContext.Provider value={{
-      bills: bills || [],
-      partiesSummary: partiesSummary || {}, // Yeh line crash hone se bachayegi
-      loading,
-      refreshBills,
-      saveBill,
-      updateBill: async (id, upd) => {
-        await updateBill(id, upd);
-        refreshBills();
-      },
-      deleteBill: async (id) => {
-        await deleteBill(id);
-        refreshBills();
-      }
+      bills, partiesSummary, loading, refreshBills,
+      saveBill, updateBill, deleteBill
     }}>
       {children}
     </AccountsContext.Provider>
