@@ -14,6 +14,9 @@ import {
 const CORE_BRANDS = ['Bell', 'Race', 'Tesco', 'Jhonson'];
 const PLY_OPTIONS  = ['5', '6', '8', '10'];
 
+// Jambo categories list (StockContext wali)
+const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
+
 const sideMatch = (inventorySide, formSide) => {
   if (!inventorySide || !formSide) return false;
   const map = { 'D/S': ['Double', 'D/S', 'double'], 'S/S': ['Single', 'S/S', 'single'] };
@@ -38,7 +41,6 @@ const Production = () => {
   const [rollErr, setRollErr] = useState('');
   const [rollLoading, setRollLoading] = useState(false);
 
-  // Load history on mount
   useEffect(() => {
     getProductions()
       .then(d => setProductions(d))
@@ -53,46 +55,48 @@ const Production = () => {
 
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
- // Production.jsx ke andar handleSearch function ko update karein:
-const handleSearch = async () => {
-  let raw = rollInput.trim();
-  setRollErr(''); setRollFound(null);
-  if (!raw) { setRollErr('Roll number likhein pehle'); return; }
-  
-  setRollLoading(true);
-  try {
-    // Try 1: As entered (e.g. "042")
-    let found = await getInventoryByRoll(raw);
+  // ✅ FIXED SEARCH LOGIC
+  const handleSearch = async () => {
+    let raw = rollInput.trim();
+    setRollErr(''); setRollFound(null);
+    if (!raw) { setRollErr('Roll number likhein pehle'); return; }
     
-    // Try 2: As number (e.g. "42") agar pehle nahi mila
-    if (!found && raw.startsWith('0')) {
-      const numOnly = parseInt(raw, 10).toString();
-      found = await getInventoryByRoll(numOnly);
-    }
-
-    if (!found) {
-      setRollErr(`Roll #${raw} inventory mein nahi mila. Check karein ke Inventory mein ye roll exist karta hai ya nahi.`);
-    } else {
-      // Check if it's actually a Jambo roll
-      const cat = (found.category || found.type || '').toLowerCase();
-      const isJambo = !['core', 'carton', 'tape'].includes(cat);
+    setRollLoading(true);
+    try {
+      // Step 1: Try exactly as typed
+      let found = await getInventoryByRoll(raw);
       
-      if (!isJambo) {
-        setRollErr(`Roll #${raw} ek ${found.category} hai — Sirf Jambo rolls production mein use ho sakte hain.`);
-      } else if (Number(found.yards || found.length || 0) <= 0) {
-        setRollErr(`Roll #${raw} ki yards/length khatam ho gayi hai (Stock: 0).`);
-      } else {
-        // Success
-        setRollFound(found);
+      // Step 2: Agar nahi mila aur 0 se shuru ho raha (e.g. 042), toh "42" try karein
+      if (!found && raw.startsWith('0')) {
+        const numOnly = parseInt(raw, 10).toString();
+        found = await getInventoryByRoll(numOnly);
       }
+
+      if (!found) {
+        setRollErr(`Roll #${raw} inventory mein nahi mila.`);
+      } else {
+        // Step 3: Check if it's a Jambo Roll category
+        const cat = found.category || found.type || '';
+        const isJambo = JAMBO_CATS.includes(cat);
+        
+        if (!isJambo) {
+          setRollErr(`Roll #${raw} ek ${cat} hai — Sirf Jambo rolls (Clear, Tan, etc.) search karein.`);
+        } else if (Number(found.yards || 0) <= 0) {
+          setRollErr(`Roll #${raw} ka stock khatam hai (0 yards).`);
+        } else {
+          setRollFound(found);
+          flash(`✅ Roll #${raw} (${cat}) found!`, true);
+        }
+      }
+    } catch (err) { 
+      setRollErr('Search error: ' + err.message); 
+    } finally { 
+      setRollLoading(false); 
     }
-  } catch (err) { 
-    setRollErr('Search error: ' + err.message); 
-  } finally { 
-    setRollLoading(false); 
-  }
-};
-  // Fix 2: Core matching logic
+  };
+
+  const clearRoll = () => { setRollInput(''); setRollFound(null); setRollErr(''); };
+
   const coreItem = useMemo(() => {
     if (!form.coreBrand || !form.coreSide || !form.corePly) return null;
     return inventory.find(i => 
@@ -110,19 +114,18 @@ const handleSearch = async () => {
   const tooMany = rollFound && totalYards > 0 && totalYards > availYards;
   const isReady = Boolean(rollFound && !tooMany && coreItem && coreQty > 0 && yardsPerCore > 0);
 
-  // Fix 3: Handle Submit with stock adjustment
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isReady) return;
     setSaving(true);
     try {
-      // Stock adjust calls
+      // Update Stock
       await adjustStock(rollFound, 'yards', -totalYards);
       await adjustStock(coreItem, 'qty', -coreQty);
 
       const record = {
         date: form.date,
-        roll_no: String(rollFound.rollNo || rollFound.roll_no || ''),
+        roll_no: String(rollFound.roll_no || rollFound.rollNo || ''),
         jambo_type: rollFound.category || rollFound.type || '',
         micron: String(rollFound.micron || ''),
         width: String(rollFound.width || ''),
@@ -132,17 +135,14 @@ const handleSearch = async () => {
         core_qty_used: coreQty,
         yards_per_core: yardsPerCore,
         yards_used: totalYards,
-        // Snapshots to restore stock if deleted later
         roll_snapshot: { ...rollFound },
-        core_snapshot: { ...coreItem }
+        core_snapshot: { ...coreItem },
       };
 
       const saved = await addProduction(record);
       setProductions(prev => [saved, ...prev]);
-      flash(`✅ Success: Issued ${totalYards} yds from Roll #${record.roll_no}`);
-      setForm(emptyForm); 
-      clearRoll(); 
-      setTab('history');
+      flash(`✅ Success: Recorded ${totalYards} yds from Roll #${record.roll_no}`);
+      setForm(emptyForm); clearRoll(); setTab('history');
     } catch (err) { 
       flash('❌ Error: ' + err.message, false); 
       await refreshInventory(); 
@@ -150,20 +150,15 @@ const handleSearch = async () => {
     finally { setSaving(false); }
   };
 
-  // Fix 4: Delete with stock restoration
   const handleDelete = async (p) => {
     if (!window.confirm('Delete and restore stock?')) return;
     try {
       if (p.roll_snapshot) await adjustStock(p.roll_snapshot, 'yards', Number(p.yards_used || 0));
       if (p.core_snapshot) await adjustStock(p.core_snapshot, 'qty', Number(p.core_qty_used || 0));
-      
-      await deleteProduction(p._id || p.id);
-      setProductions(prev => prev.filter(x => (x._id !== p._id && x.id !== p.id)));
+      await deleteProduction(p._id);
+      setProductions(prev => prev.filter(x => x._id !== p._id));
       flash('✅ Record deleted and stock restored');
-    } catch (err) { 
-      flash('❌ Delete error: ' + err.message, false); 
-      await refreshInventory(); 
-    }
+    } catch (err) { flash('❌ Delete error: ' + err.message, false); await refreshInventory(); }
   };
 
   const InputLabel = ({ children }) => <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-1 block">{children}</label>;
@@ -224,7 +219,7 @@ const handleSearch = async () => {
                   {rollFound && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 text-[#10b981]" size={24} />}
                 </div>
                 <button type="button" onClick={handleSearch} disabled={rollLoading} className="bg-[#10b981] text-black px-10 rounded-2xl font-black text-xs uppercase hover:scale-105 active:scale-95 transition-all">
-                  {rollLoading ? 'Syncing...' : 'Fetch Roll'}
+                  {rollLoading ? 'Searching...' : 'Fetch Roll'}
                 </button>
               </div>
 
@@ -277,7 +272,7 @@ const handleSearch = async () => {
                       {PLY_OPTIONS.map(p => <option key={p} value={p}>{p} Ply</option>)}
                     </select>
                   </div>
-                  <div><InputLabel>Quantity</InputLabel><input type="number" value={form.coreQty} onChange={e => upd('coreQty', e.target.value)} placeholder="0" className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold" /></div>
+                  <div><InputLabel>Quantity (Pcs)</InputLabel><input type="number" value={form.coreQty} onChange={e => upd('coreQty', e.target.value)} placeholder="0" className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold" /></div>
                   <div><InputLabel>Yards Per Core</InputLabel><input type="number" value={form.yardsPerCore} onChange={e => upd('yardsPerCore', e.target.value)} placeholder="0.00" className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold" /></div>
                </div>
 
@@ -323,7 +318,7 @@ const handleSearch = async () => {
           </div>
         </form>
       ) : (
-        /* HISTORY LOGS TABLE */
+        /* HISTORY LOGS */
         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl animate-in slide-in-from-bottom-6">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
