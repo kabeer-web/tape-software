@@ -11,7 +11,7 @@ const SIDE_OPTIONS = [
 ];
 
 export default function BellCore() {
-  const { inventory, addRoll, updateStock, removeItem, loading } = useContext(StockContext);
+  const { inventory, upsertStock, updateStock, removeItem, loading } = useContext(StockContext);
   const [filterSide, setFilterSide] = useState('');
   const [filterPly,  setFilterPly]  = useState('');
   const [addSide,    setAddSide]    = useState('');
@@ -35,7 +35,7 @@ export default function BellCore() {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!addSide||!addPly||!addQty) { flash('❌ Sab fields fill karo'); return; }
-    await addRoll({ brand:BRAND, category:'Core', side:addSide, ply:addPly, qty:parseInt(addQty) });
+    await upsertStock({ brand:BRAND, category:'Core', side:addSide, ply:addPly }, parseInt(addQty));
     setAddQty('');
     flash('✅ Core added!');
   };
