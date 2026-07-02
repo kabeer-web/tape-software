@@ -55,46 +55,53 @@ const Production = () => {
 
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  // ✅ FIXED SEARCH LOGIC
-  const handleSearch = async () => {
-    let raw = rollInput.trim();
-    setRollErr(''); setRollFound(null);
-    if (!raw) { setRollErr('Roll number likhein pehle'); return; }
+  // ✅ UPDATED SMART SEARCH (1 likhne par 001 khud banayega)
+const handleSearch = async () => {
+  let raw = rollInput.trim();
+  setRollErr(''); setRollFound(null);
+  if (!raw) { setRollErr('Roll number likhein pehle'); return; }
+  
+  setRollLoading(true);
+  try {
+    // 1. Pehle user ka input as-is try karein (e.g. "1")
+    let found = await getInventoryByRoll(raw);
     
-    setRollLoading(true);
-    try {
-      // Step 1: Try exactly as typed
-      let found = await getInventoryByRoll(raw);
-      
-      // Step 2: Agar nahi mila aur 0 se shuru ho raha (e.g. 042), toh "42" try karein
-      if (!found && raw.startsWith('0')) {
-        const numOnly = parseInt(raw, 10).toString();
-        found = await getInventoryByRoll(numOnly);
-      }
-
-      if (!found) {
-        setRollErr(`Roll #${raw} inventory mein nahi mila.`);
-      } else {
-        // Step 3: Check if it's a Jambo Roll category
-        const cat = found.category || found.type || '';
-        const isJambo = JAMBO_CATS.includes(cat);
-        
-        if (!isJambo) {
-          setRollErr(`Roll #${raw} ek ${cat} hai — Sirf Jambo rolls (Clear, Tan, etc.) search karein.`);
-        } else if (Number(found.yards || 0) <= 0) {
-          setRollErr(`Roll #${raw} ka stock khatam hai (0 yards).`);
-        } else {
-          setRollFound(found);
-          flash(`✅ Roll #${raw} (${cat}) found!`, true);
-        }
-      }
-    } catch (err) { 
-      setRollErr('Search error: ' + err.message); 
-    } finally { 
-      setRollLoading(false); 
+    // 2. Agar nahi mila, toh 3-digit padding try karein (e.g. "1" -> "001")
+    if (!found && !isNaN(raw)) {
+      const padded = raw.padStart(3, '0'); // "1" ko "001" bana dega
+      found = await getInventoryByRoll(padded);
     }
-  };
 
+    // 3. Agar ab bhi nahi mila, toh 2-digit padding try karein (e.g. "01")
+    if (!found && !isNaN(raw)) {
+      const padded2 = raw.padStart(2, '0'); // "1" ko "01" bana dega
+      found = await getInventoryByRoll(padded2);
+    }
+
+    if (!found) {
+      setRollErr(`Roll #${raw} inventory mein nahi mila. (00${raw} bhi check kiya)`);
+    } else {
+      // Check if it's a Jambo roll (Category check)
+      const cat = (found.category || found.type || '').toLowerCase();
+      // Yahan wo categories hain jo Jambo nahi hain
+      const notJambo = ['core', 'carton', 'tape', 'packing']; 
+      const isJambo = !notJambo.includes(cat);
+      
+      if (!isJambo) {
+        setRollErr(`Roll #${raw} ek ${found.category} hai — Jambo roll search karein.`);
+      } else if (Number(found.yards || 0) <= 0) {
+        setRollErr(`Roll #${raw} ka stock khatam hai.`);
+      } else {
+        setRollFound(found);
+        flash(`✅ Roll Found: #${found.roll_no || found.rollNo}`, true);
+      }
+    }
+  } catch (err) { 
+    setRollErr('Search error: ' + err.message); 
+  } finally { 
+    setRollLoading(false); 
+  }
+};
   const clearRoll = () => { setRollInput(''); setRollFound(null); setRollErr(''); };
 
   const coreItem = useMemo(() => {
