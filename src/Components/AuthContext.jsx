@@ -34,12 +34,17 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const signUp = async (email, password, name) => {
+  const signUp = async (email, password, name, username) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
-    // Profile banao
+    // Profile banao — username stored so Login can look up this user's
+    // email without any hardcoded name->email map in the frontend.
     if (data.user) {
-      await supabase.from('profiles').insert([{ id: data.user.id, name }]);
+      const cleanUsername = (username || name || '').toLowerCase().trim();
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([{ id: data.user.id, name, username: cleanUsername, email }]);
+      if (profileError) throw profileError;
     }
     return data;
   };
