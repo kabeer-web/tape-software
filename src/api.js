@@ -62,15 +62,16 @@ export const deleteInventory = async (id) => {
 };
 
 export const getInventoryByRoll = async (rollNo) => {
+  // .ilike use karne se uppercase/lowercase ka masla bhi hal ho jata hai
   const { data, error } = await supabase
     .from('inventory')
     .select('*')
-    .eq('roll_no', rollNo)
+    .ilike('roll_no', rollNo) 
     .maybeSingle();
+    
   if (error) throw new Error(error.message);
   return mapId(data);
 };
-
 // HS Stock Sync Logic
 export const syncHSStock = async (item, multiplier) => {
   const { data: records } = await supabase
