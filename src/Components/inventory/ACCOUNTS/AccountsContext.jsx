@@ -1,64 +1,68 @@
 import { createContext, useState, useEffect, useContext, useCallback, useMemo } from 'react';
-import { getBills, addBill, updateBill, deleteBill, addLedgerEntry } from '../../../api';
+import { 
+  getBills, addBill, updateBill, deleteBill, 
+  getLedgerEntries, addLedgerEntry, updateLedgerEntry, deleteLedgerEntry 
+} from '../../../api';
 
-// Initialize with safe default values
 export const AccountsContext = createContext({
-  bills: [],
-  partiesSummary: {},
-  loading: true,
-  refreshBills: () => {}
+  bills: [], ledger: [], partiesSummary: {}, loading: true, refreshAll: () => {}
 });
 
 export const useAccounts = () => useContext(AccountsContext);
 
 export const AccountsProvider = ({ children }) => {
   const [bills, setBills] = useState([]);
+  const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const refreshBills = useCallback(async () => {
+  const refreshAll = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getBills();
-      setBills(Array.isArray(data) ? data : []);
+      const [billsData, ledgerData] = await Promise.all([getBills(), getLedgerEntries()]);
+      setBills(Array.isArray(billsData) ? billsData : []);
+      setLedger(Array.isArray(ledgerData) ? ledgerData : []);
     } catch (e) {
-      console.error("Load Error:", e);
-      setBills([]);
+      console.error("Sync Error:", e);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { refreshBills(); }, [refreshBills]);
+  useEffect(() => { refreshAll(); }, [refreshAll]);
 
-  // Guaranteed Object: It will always return an object {} even if bills are empty
+  // Logic: Combine Bills and Ledger to find all unique parties
   const partiesSummary = useMemo(() => {
-    if (!bills || bills.length === 0) return {};
-    return bills.reduce((acc, bill) => {
-      const name = bill.partyName?.trim().toUpperCase();
-      if (!name) return acc;
-      if (!acc[name]) acc[name] = { name, type: bill.billType, total: 0 };
-      acc[name].total += (Number(bill.grandTotal) || 0);
-      return acc;
-    }, {});
-  }, [bills]);
+    const summary = {};
+    const process = (name, type, amount, isDebit) => {
+      const n = name?.trim().toUpperCase();
+      if (!n) return;
+      if (!summary[n]) summary[n] = { name: n, type: type || 'Sale', debit: 0, credit: 0, balance: 0 };
+      if (isDebit) summary[n].debit += Number(amount || 0);
+      else summary[n].credit += Number(amount || 0);
+      summary[n].balance = summary[n].debit - summary[n].credit;
+    };
 
-  const saveBill = async (billData) => {
-    try {
-      const saved = await addBill(billData);
-      setBills(prev => [saved, ...prev]);
-      return saved._id;
-    } catch (err) { throw err; }
+    ledger.forEach(e => process(e.party_name, e.party_type, e.amount, e.entry_type === 'debit'));
+    return summary;
+  }, [ledger]);
+
+  const handleUpdateEntry = async (id, updates) => {
+    await updateLedgerEntry(id, updates);
+    await refreshAll();
+  };
+
+  const handleDeleteEntry = async (id) => {
+    await deleteLedgerEntry(id);
+    await refreshAll();
   };
 
   return (
     <AccountsContext.Provider value={{
-      bills, 
-      partiesSummary, // Dashboard use karta hai client base ke liye
-      loading, 
-      refreshBills,
-      saveBill, 
-      updateBill, 
-      deleteBill
+      bills, ledger, partiesSummary, loading, refreshAll,
+      saveBill: addBill,
+      updateEntry: handleUpdateEntry,
+      deleteEntry: handleDeleteEntry,
+      postLedger: addLedgerEntry
     }}>
       {children}
     </AccountsContext.Provider>
