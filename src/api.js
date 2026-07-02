@@ -11,6 +11,23 @@ const mapId = (data) => {
   return { ...data, _id: data.id };
 };
 
+/**
+ * HELPER: Database (snake_case) se Frontend (camelCase) mapping
+ */
+const mapBillToFrontend = (b) => {
+  if (!b) return null;
+  return {
+    ...b,
+    _id: b.id,
+    billType: b.bill_type,
+    billNo: b.bill_no,
+    partyName: b.party_name,
+    grandTotal: b.grand_total,
+    totalCartonCount: b.total_carton_count,
+    cartonUsed: b.carton_used
+  };
+};
+
 // ─── INVENTORY / STOCK API ────────────────────────────────
 export const getInventory = async () => {
   const { data, error } = await supabase
@@ -22,13 +39,11 @@ export const getInventory = async () => {
 };
 
 export const addInventory = async (item) => {
-  // Frontend se 'rollNo' aata hai, DB mein 'roll_no' ho sakta hai
   const payload = {
     ...item,
     roll_no: item.rollNo || item.roll_no,
     date: item.date || new Date().toLocaleDateString('en-GB')
   };
-  // Duplicate fields remove karna takay Supabase error na de
   delete payload.rollNo; 
   delete payload._id;
 
@@ -62,40 +77,20 @@ export const deleteInventory = async (id) => {
 };
 
 export const getInventoryByRoll = async (rollNo) => {
-  // .ilike use karne se uppercase/lowercase ka masla bhi hal ho jata hai
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('inventory')
     .select('*')
-    .ilike('roll_no', rollNo) 
+    .eq('roll_no', rollNo)
     .maybeSingle();
-    
+
+  if (!data && !isNaN(rollNo)) {
+    const padded = rollNo.padStart(3, '0');
+    const res = await supabase.from('inventory').select('*').eq('roll_no', padded).maybeSingle();
+    data = res.data;
+  }
+
   if (error) throw new Error(error.message);
   return mapId(data);
-};
-// HS Stock Sync Logic
-export const syncHSStock = async (item, multiplier) => {
-  const { data: records } = await supabase
-    .from('inventory')
-    .select('*')
-    .eq('brand', item.brand)
-    .eq('carton_type', item.cartonType)
-    .eq('size', item.size);
-
-  if (records && records.length > 0) {
-    const target = records[0];
-    const perCtn = Number(target.qty_per_carton || target.per_ctn || item.perCtn || 1);
-    const cartonChange = Number(item.cartons) * multiplier;
-    const qtyChange = (Number(item.cartons) * perCtn) * multiplier;
-
-    const { error } = await supabase.from('inventory').update({
-      cartons: Math.max(0, (Number(target.cartons) || 0) + cartonChange),
-      qty: Math.max(0, (Number(target.qty) || 0) + qtyChange)
-    }).eq('id', target.id);
-
-    if (error) throw new Error(error.message);
-    return true;
-  }
-  return false;
 };
 
 // ─── BILLS / ACCOUNTS API ────────────────────────────────
@@ -105,28 +100,47 @@ export const getBills = async () => {
     .select('*')
     .order('date', { ascending: false });
   if (error) throw new Error(error.message);
-  return mapId(data);
+  return (data || []).map(mapBillToFrontend);
 };
 
 export const addBill = async (billData) => {
+  const payload = {
+    bill_type: billData.billType,
+    bill_no: billData.billNo,
+    party_name: billData.partyName,
+    date: billData.date,
+    items: billData.items,
+    grand_total: billData.grandTotal,
+    total_carton_count: billData.totalCartonCount,
+    carton_used: billData.cartonUsed,
+    logo: billData.logo
+  };
+
   const { data, error } = await supabase
     .from('bills')
-    .insert([billData])
+    .insert([payload])
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return mapId(data);
+  return mapBillToFrontend(data);
 };
 
 export const updateBill = async (id, updates) => {
+  const payload = {
+    bill_type: updates.billType,
+    bill_no: updates.billNo,
+    party_name: updates.partyName,
+    grand_total: updates.grandTotal,
+    total_carton_count: updates.totalCartonCount
+  };
   const { data, error } = await supabase
     .from('bills')
-    .update(updates)
+    .update(payload)
     .eq('id', id)
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return mapId(data);
+  return mapBillToFrontend(data);
 };
 
 export const deleteBill = async (id) => {
@@ -157,26 +171,6 @@ export const addLedgerEntry = async (entry) => {
   return mapId(data);
 };
 
-export const updateLedgerEntry = async (id, updates) => {
-  const { data, error } = await supabase
-    .from('ledger_entries')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return mapId(data);
-};
-
-export const deleteLedgerEntry = async (id) => {
-  const { error } = await supabase
-    .from('ledger_entries')
-    .delete()
-    .eq('id', id);
-  if (error) throw new Error(error.message);
-  return true;
-};
-
 // ─── PRODUCTIONS API ─────────────────────────────────────
 export const getProductions = async () => {
   const { data, error } = await supabase
@@ -191,17 +185,6 @@ export const addProduction = async (prodData) => {
   const { data, error } = await supabase
     .from('productions')
     .insert([prodData])
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return mapId(data);
-};
-
-export const updateProduction = async (id, updates) => {
-  const { data, error } = await supabase
-    .from('productions')
-    .update(updates)
-    .eq('id', id)
     .select()
     .single();
   if (error) throw new Error(error.message);
