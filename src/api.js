@@ -1,8 +1,5 @@
 import { supabase } from './supabase';
 
-/**
- * HELPER: Supabase 'id' ko frontend ke '_id' format mein convert karne ke liye
- */
 const mapId = (data) => {
   if (!data) return null;
   if (Array.isArray(data)) {
@@ -11,10 +8,8 @@ const mapId = (data) => {
   return { ...data, _id: data.id };
 };
 
-/**
- * HELPER: Database (snake_case) se Frontend (camelCase) mapping
- */
-const mapBillToFrontend = (b) => {
+// Frontend (camelCase) <-> Backend (snake_case) Translator
+const translateBill = (b) => {
   if (!b) return null;
   return {
     ...b,
@@ -28,7 +23,7 @@ const mapBillToFrontend = (b) => {
   };
 };
 
-// ─── INVENTORY / STOCK API ────────────────────────────────
+// ─── INVENTORY API ───────────────────────────────────────
 export const getInventory = async () => {
   const { data, error } = await supabase
     .from('inventory')
@@ -47,60 +42,39 @@ export const addInventory = async (item) => {
   delete payload.rollNo; 
   delete payload._id;
 
-  const { data, error } = await supabase
-    .from('inventory')
-    .insert([payload])
-    .select()
-    .single();
+  const { data, error } = await supabase.from('inventory').insert([payload]).select().single();
   if (error) throw new Error(error.message);
   return mapId(data);
 };
 
 export const updateInventory = async (id, updates) => {
-  const { data, error } = await supabase
-    .from('inventory')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
+  const { data, error } = await supabase.from('inventory').update(updates).eq('id', id).select().single();
   if (error) throw new Error(error.message);
   return mapId(data);
 };
 
 export const deleteInventory = async (id) => {
-  const { error } = await supabase
-    .from('inventory')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.from('inventory').delete().eq('id', id);
   if (error) throw new Error(error.message);
   return true;
 };
 
 export const getInventoryByRoll = async (rollNo) => {
-  let { data, error } = await supabase
-    .from('inventory')
-    .select('*')
-    .eq('roll_no', rollNo)
-    .maybeSingle();
-
+  let { data, error } = await supabase.from('inventory').select('*').ilike('roll_no', rollNo).maybeSingle();
   if (!data && !isNaN(rollNo)) {
     const padded = rollNo.padStart(3, '0');
     const res = await supabase.from('inventory').select('*').eq('roll_no', padded).maybeSingle();
     data = res.data;
   }
-
   if (error) throw new Error(error.message);
   return mapId(data);
 };
 
-// ─── BILLS / ACCOUNTS API ────────────────────────────────
+// ─── BILLS API (SNAKE_CASE MAPPING FIXED) ────────────────
 export const getBills = async () => {
-  const { data, error } = await supabase
-    .from('bills')
-    .select('*')
-    .order('date', { ascending: false });
+  const { data, error } = await supabase.from('bills').select('*').order('date', { ascending: false });
   if (error) throw new Error(error.message);
-  return (data || []).map(mapBillToFrontend);
+  return (data || []).map(translateBill);
 };
 
 export const addBill = async (billData) => {
@@ -116,13 +90,12 @@ export const addBill = async (billData) => {
     logo: billData.logo
   };
 
-  const { data, error } = await supabase
-    .from('bills')
-    .insert([payload])
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return mapBillToFrontend(data);
+  const { data, error } = await supabase.from('bills').insert([payload]).select().single();
+  if (error) {
+    console.error("DB Error:", error);
+    throw new Error(error.message);
+  }
+  return translateBill(data);
 };
 
 export const updateBill = async (id, updates) => {
@@ -130,24 +103,15 @@ export const updateBill = async (id, updates) => {
     bill_type: updates.billType,
     bill_no: updates.billNo,
     party_name: updates.partyName,
-    grand_total: updates.grandTotal,
-    total_carton_count: updates.totalCartonCount
+    grand_total: updates.grandTotal
   };
-  const { data, error } = await supabase
-    .from('bills')
-    .update(payload)
-    .eq('id', id)
-    .select()
-    .single();
+  const { data, error } = await supabase.from('bills').update(payload).eq('id', id).select().single();
   if (error) throw new Error(error.message);
-  return mapBillToFrontend(data);
+  return translateBill(data);
 };
 
 export const deleteBill = async (id) => {
-  const { error } = await supabase
-    .from('bills')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.from('bills').delete().eq('id', id);
   if (error) throw new Error(error.message);
   return true;
 };
@@ -162,40 +126,26 @@ export const getLedgerEntries = async (partyName) => {
 };
 
 export const addLedgerEntry = async (entry) => {
-  const { data, error } = await supabase
-    .from('ledger_entries')
-    .insert([entry])
-    .select()
-    .single();
+  const { data, error } = await supabase.from('ledger_entries').insert([entry]).select().single();
   if (error) throw new Error(error.message);
   return mapId(data);
 };
 
 // ─── PRODUCTIONS API ─────────────────────────────────────
 export const getProductions = async () => {
-  const { data, error } = await supabase
-    .from('productions')
-    .select('*')
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('productions').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return mapId(data);
 };
 
 export const addProduction = async (prodData) => {
-  const { data, error } = await supabase
-    .from('productions')
-    .insert([prodData])
-    .select()
-    .single();
+  const { data, error } = await supabase.from('productions').insert([prodData]).select().single();
   if (error) throw new Error(error.message);
   return mapId(data);
 };
 
 export const deleteProduction = async (id) => {
-  const { error } = await supabase
-    .from('productions')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.from('productions').delete().eq('id', id);
   if (error) throw new Error(error.message);
   return true;
 };
