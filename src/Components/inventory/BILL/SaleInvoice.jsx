@@ -3,9 +3,12 @@ import {
   FileText, Plus, Trash2, Printer,
   Upload, X, Save, AlertCircle, CheckCircle2, Box
 } from 'lucide-react';
-import { useAccounts } from '../../ACCOUNTS/AccountsContext';
-import { StockContext } from '../../StockContext';
 
+// ✅ SHI PATHS YE HAIN (Ek "../" kam kar diya gaya hai)
+import { useAccounts } from '../ACCOUNTS/AccountsContext';
+import { StockContext } from '../StockContext';
+
+// ... baaki pura code same rahega
 const PARTIES = [
   "AR PACKAGES", "ROSHAN TRADER", "HUZAIFA TRADER", "SHAMS STATIONARY", "ABDUL RAUF",
   "HAMZULLAH", "ANEES STATIONARY", "A ONE", "ZEESHAN HYD", "ABDUL BASIT", "MD TRADERS",
