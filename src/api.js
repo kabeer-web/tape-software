@@ -1,5 +1,8 @@
 import { supabase } from './supabase';
 
+/**
+ * HELPER: Supabase 'id' ko frontend ke '_id' format mein convert karne ke liye
+ */
 const mapId = (data) => {
   if (!data) return null;
   if (Array.isArray(data)) {
@@ -8,7 +11,9 @@ const mapId = (data) => {
   return { ...data, _id: data.id };
 };
 
-// Frontend (camelCase) <-> Backend (snake_case)
+/**
+ * HELPER: Database (snake_case) se Frontend (camelCase) mapping
+ */
 const translateBill = (b) => {
   if (!b) return null;
   return {
@@ -69,7 +74,7 @@ export const getInventoryByRoll = async (rollNo) => {
   return mapId(data);
 };
 
-// ─── BILLS API (MAPPING FIXED) ───────────────────────────
+// ─── BILLS API ───────────────────────────────────────────
 export const getBills = async () => {
   const { data, error } = await supabase.from('bills').select('*').order('date', { ascending: false });
   if (error) throw new Error(error.message);
@@ -111,7 +116,7 @@ export const deleteBill = async (id) => {
   return true;
 };
 
-// ─── LEDGER API ──────────────────────────────────────────
+// ─── LEDGER API (FIXED: Added Update & Delete) ───────────
 export const getLedgerEntries = async (partyName) => {
   let q = supabase.from('ledger_entries').select('*').order('date', { ascending: false });
   if (partyName) q = q.ilike('party_name', `%${partyName.trim()}%`);
@@ -126,7 +131,19 @@ export const addLedgerEntry = async (entry) => {
   return mapId(data);
 };
 
-// ─── PRODUCTIONS API ─────────────────────────────────────
+export const updateLedgerEntry = async (id, updates) => {
+  const { data, error } = await supabase.from('ledger_entries').update(updates).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const deleteLedgerEntry = async (id) => {
+  const { error } = await supabase.from('ledger_entries').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+// ─── PRODUCTIONS API (FIXED: Added Update) ────────────────
 export const getProductions = async () => {
   const { data, error } = await supabase.from('productions').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
@@ -135,6 +152,12 @@ export const getProductions = async () => {
 
 export const addProduction = async (prodData) => {
   const { data, error } = await supabase.from('productions').insert([prodData]).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const updateProduction = async (id, updates) => {
+  const { data, error } = await supabase.from('productions').update(updates).eq('id', id).select().single();
   if (error) throw new Error(error.message);
   return mapId(data);
 };
