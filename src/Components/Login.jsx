@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '../supabase';
 import { Eye, EyeOff, LogIn, Lock, User } from 'lucide-react';
+
+// Fallback only — covers accounts created before the `profiles.username`/
+// `profiles.email` columns existed and before the DB backfill has run.
+// Once every profile row has a username+email, this map is dead code and
+// can be deleted; it is not the primary lookup path.
+const LEGACY_USER_FALLBACK = {
+  'sami': 'sami@beerflow.com',
+  'matiullah': 'matiullah@beerflow.com',
+  'kabeer': 'kabeer@beerflow.com'
+};
 
 const Login = () => {
   const { signIn } = useAuth();
@@ -10,20 +21,33 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const resolveEmail = async (username) => {
+    const { data, error: lookupError } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (lookupError) throw lookupError;
+    if (data?.email) return data.email;
+    return LEGACY_USER_FALLBACK[username] || null;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // Map names to the actual emails created in Supabase
-    const userMap = {
-      'sami': 'sami@beerflow.com',
-      'matiullah': 'matiullah@beerflow.com',
-      'kabeer': 'kabeer@beerflow.com'
-    };
-
     const username = name.toLowerCase().trim();
-    const targetEmail = userMap[username];
+
+    let targetEmail;
+    try {
+      targetEmail = await resolveEmail(username);
+    } catch (err) {
+      setError('Could not verify username. Please try again.');
+      setLoading(false);
+      return;
+    }
 
     if (!targetEmail) {
       setError('Invalid username. Please enter a valid registered name.');
