@@ -1,5 +1,5 @@
 import { useState, useContext } from 'react';
-import { StockContext } from "/src/Components/inventory/StockContext";
+import { StockContext } from "./StockContext";
 import { Search, Layers, Package, AlertTriangle } from 'lucide-react';
 
 const LOW_STOCK_THRESHOLD = 20;
