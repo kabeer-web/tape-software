@@ -5,8 +5,8 @@ import { PlusCircle, AlertTriangle, Package, Trash2 } from 'lucide-react';
 const LOW = 20;
 const BRAND = 'Race'; // Race, Tesco, Jhonson ke liye ye badlo
 
-const race = () => {
-  const { inventory, addRoll, updateStock, removeItem, loading } = useContext(StockContext);
+const Race = () => {
+  const { inventory, upsertStock, updateStock, removeItem, loading } = useContext(StockContext);
   const [side, setSide] = useState('');
   const [ply, setPly] = useState('');
   const [qty, setQty] = useState('');
@@ -22,18 +22,16 @@ const race = () => {
   const totalQty = filtered.reduce((s, i) => s + (Number(i.qty) || 0), 0);
   const lowCount = filtered.filter(i => Number(i.qty) < LOW).length;
 
-  const handleAdd = (e) => {
+  const handleAdd = async (e) => {
   e.preventDefault();
   if (!side || !ply || !qty) return;
-  // category: 'Core' add kiya gaya hai
-  addRoll({ 
-    brand: BRAND, 
-    category: 'Core', 
-    side: side, 
-    ply: ply, 
-    qty: parseInt(qty) 
-  });
-  setQty('');
+  try {
+    await upsertStock({ brand: BRAND, category: 'Core', side: side, ply: ply }, parseInt(qty));
+    setQty('');
+  } catch (err) {
+    console.error(err);
+    alert('Error adding stock');
+  }
 };
 
   const handleRemove = (id) => {
@@ -155,4 +153,4 @@ const race = () => {
   );
 };
 
-export default race;
+export default Race;
