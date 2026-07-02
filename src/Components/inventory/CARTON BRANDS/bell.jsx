@@ -23,21 +23,25 @@ const Bell = () => {
   const totalQty = filtered.reduce((s, i) => s + (Number(i.qty) || 0), 0);
   const lowCount = filtered.filter(i => Number(i.qty) < LOW).length;
 
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    if (!cartonType || !size || !qty) return;
-    
-    // FIX: Category Carton lazmi bhejna hai
+// Bell.jsx ke andar handleAdd function:
+const handleAdd = async (e) => {
+  e.preventDefault();
+  if (!cartonType || !size || !qty) return;
+  
+  try {
     await addRoll({ 
       brand: BRAND, 
       category: 'Carton',
-      carton_type: cartonType, // DB column name
-      cartonType: cartonType,  // Local fallback
-      size: size, 
-      qty: parseInt(qty) 
+      carton_type: cartonType, // DB column
+      size: String(size), 
+      qty: Number(qty)
     });
     setQty('');
-  };
+    alert("Stock Added!");
+  } catch (err) {
+    alert("Error adding stock");
+  }
+};
 
   const handleRemove = (id) => {
     if (!window.confirm('Pakka remove karna hai?')) return;
