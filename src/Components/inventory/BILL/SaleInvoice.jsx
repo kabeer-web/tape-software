@@ -70,7 +70,7 @@ const SelectOrCustom = ({ value, onChange, options, placeholder }) => {
 
 const ErrMsg = ({ msg }) => msg ? <p className="text-red-400 text-[10px] mt-1 flex items-center gap-1"><AlertCircle size={10}/>{msg}</p> : null;
 
-// ── HTML Print Generator (Logic Inside Component) ──────
+// ── HTML Print Generator ─────────────────────────────────
 export const generateInvoiceHTML = (bill) => {
     const { billNo, partyName, date, items, grandTotal, totalCartonCount, logo } = bill;
     const logoHtml = logo ? `<img src="${logo}" style="height:60px;object-fit:contain;"/>` : `<div style="font-size:24px;font-weight:900;">HS Packages</div>`;
@@ -89,8 +89,6 @@ const SaleInvoice = () => {
   const [buyerName,  setBuyerName]  = useState('');
   const [date,       setDate]       = useState(new Date().toLocaleDateString('en-GB'));
   const [form,       setForm]       = useState(emptyItem);
-  const [formErrs,   setFormErrs]   = useState({});
-  const [headerErrs, setHeaderErrs] = useState({});
   const [rows,       setRows]       = useState([]);
   const [carton,     setCarton]     = useState(emptyCarton);
   const [logo,       setLogo]       = useState(null);
@@ -98,14 +96,14 @@ const SaleInvoice = () => {
   const [saving,     setSaving]     = useState(false);
   const fileRef = useRef(null);
 
-  const upd  = (k, v) => { setForm(p => ({...p, [k]: v})); setFormErrs(p => ({...p, [k]: ''})); };
+  const upd  = (k, v) => setForm(p => ({...p, [k]: v}));
   const updC = (k, v) => setCarton(p => ({...p, [k]: v}));
 
   const addItem = () => {
     const tc = parseFloat(form.totalCarton) || 0;
     const pc = parseFloat(form.perCtnQty)   || 0;
     const r  = parseFloat(form.rate)        || 0;
-    if (!tc || !r) return alert("CTN aur Rate zaroori hain");
+    if (!tc || !r) return alert("Qty aur Rate bharein");
     const totalQty = tc * pc;
     const total    = totalQty * r;
     const sizeLabel = [form.sizeMm ? `${form.sizeMm}mm` : '', form.sizeInch ? `${form.sizeInch}` : '', form.yards ? `${form.yards}yds` : ''].filter(Boolean).join(' / ');
@@ -116,17 +114,15 @@ const SaleInvoice = () => {
   const removeRow = (id) => setRows(p => p.filter(r => r.id !== id));
 
   const handleSave = async () => {
-    if (!billNo || !buyerName) return alert("Bill No aur Buyer Name zaroori hain");
+    if (!billNo || !buyerName) return alert("Header details missing");
     setSaving(true);
     try {
-      // Carton Stock Sync
       if (carton.brand && carton.qty) {
         const cartonInv = inventory.find(i => i.brand === carton.brand && i.category === 'Carton' && (i.carton_type === carton.type || i.cartonType === carton.type) && String(i.size) === String(carton.size));
         if (cartonInv) await updateStock(cartonInv._id || cartonInv.id, -parseInt(carton.qty));
       }
-      
       await saveBill({ billType: 'Sale', billNo, partyName: buyerName, date, items: rows, grandTotal, totalCartonCount, logo });
-      setMsg(`✅ Bill #${billNo} Save Ho Gaya!`);
+      setMsg(`✅ Save Success!`);
       setRows([]); setBillNo(''); setBuyerName('');
     } catch (err) { setMsg('❌ Error: ' + err.message); } finally { setSaving(false); }
   };
@@ -135,11 +131,11 @@ const SaleInvoice = () => {
   const totalCartonCount = rows.reduce((s, r) => s + (r.totalCarton || 0), 0);
 
   return (
-    <div className="text-white min-h-screen pb-10 p-4">
+    <div className="text-white min-h-screen p-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-black">SALE <span className="text-[#22c55e]">INVOICE</span></h1>
         <div className="flex gap-2">
-           <button onClick={handleSave} disabled={saving} className="bg-[#22c55e] text-black px-6 py-2 rounded-xl font-bold">{saving ? 'Saving...' : 'Save Bill'}</button>
+           <button onClick={handleSave} disabled={saving} className="bg-[#22c55e] text-black px-6 py-2 rounded-xl font-bold">{saving ? 'Saving...' : 'Save'}</button>
            <button onClick={() => {
              const html = generateInvoiceHTML({ billNo, partyName: buyerName, date, items: rows, grandTotal, totalCartonCount, logo });
              const w = window.open('', '_blank'); w.document.write(html); w.document.close();
@@ -147,10 +143,10 @@ const SaleInvoice = () => {
         </div>
       </div>
 
-      {msg && <div className="p-4 bg-[#22c55e]/10 border border-[#22c55e] text-[#22c55e] rounded-xl mb-4">{msg}</div>}
+      {msg && <div className="p-4 bg-[#22c55e]/10 border border-[#22c55e] text-[#22c55e] rounded-xl mb-4 font-bold">{msg}</div>}
 
       <div className="bg-white/5 p-6 rounded-3xl border border-white/10 mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <input value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="Bill No" className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none focus:border-[#22c55e]"/>
+          <input value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="Invoice #" className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none focus:border-[#22c55e]"/>
           
           <div className="relative">
             <input list="parties-list" value={buyerName} onChange={e=>setBuyerName(e.target.value.toUpperCase())} placeholder="Buyer Name" className="w-full bg-black/40 p-4 rounded-xl border border-white/10 outline-none focus:border-[#22c55e]"/>
@@ -162,32 +158,31 @@ const SaleInvoice = () => {
           <input value={date} onChange={e=>setDate(e.target.value)} className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none"/>
       </div>
 
-      <div className="bg-white/5 p-6 rounded-3xl border border-white/10 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <SelectOrCustom options={SIZE_MM} value={form.sizeMm} onChange={v=>upd('sizeMm',v)} placeholder="Size mm"/>
-          <SelectOrCustom options={YARDS_LIST} value={form.yards} onChange={v=>upd('yards',v)} placeholder="Yards"/>
-          <SelectOrCustom options={COLOURS} value={form.colour} onChange={v=>upd('colour',v)} placeholder="Colour"/>
+      {/* Item Form Section */}
+      <div className="bg-white/5 p-6 rounded-3xl border border-white/10 mb-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 items-end">
+          <SelectOrCustom options={SIZE_MM} value={form.sizeMm} onChange={v=>upd('sizeMm',v)} placeholder="Mm"/>
+          <SelectOrCustom options={YARDS_LIST} value={form.yards} onChange={v=>upd('yards',v)} placeholder="Yds"/>
+          <SelectOrCustom options={COLOURS} value={form.colour} onChange={v=>upd('colour',v)} placeholder="Color"/>
           <SelectOrCustom options={BRANDS} value={form.brand} onChange={v=>upd('brand',v)} placeholder="Brand"/>
-          <input type="number" placeholder="Total CTN" value={form.totalCarton} onChange={e=>upd('totalCarton',e.target.value)} className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none"/>
-          <input type="number" placeholder="P.CTN Qty" value={form.perCtnQty} onChange={e=>upd('perCtnQty',e.target.value)} className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none"/>
-          <input type="number" placeholder="Rate" value={form.rate} onChange={e=>upd('rate',e.target.value)} className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none"/>
-          <button onClick={addItem} className="bg-[#22c55e] text-black font-bold rounded-xl">Add Item</button>
-        </div>
+          <input type="number" placeholder="CTN" value={form.totalCarton} onChange={e=>upd('totalCarton',e.target.value)} className="bg-black/40 p-3 rounded-xl border border-white/10 outline-none"/>
+          <input type="number" placeholder="Rolls" value={form.perCtnQty} onChange={e=>upd('perCtnQty',e.target.value)} className="bg-black/40 p-3 rounded-xl border border-white/10 outline-none"/>
+          <input type="number" placeholder="Rate" value={form.rate} onChange={e=>upd('rate',e.target.value)} className="bg-black/40 p-3 rounded-xl border border-white/10 outline-none"/>
+          <button onClick={addItem} className="bg-[#22c55e] text-black font-bold h-[48px] rounded-xl flex items-center justify-center"><Plus size={20}/></button>
       </div>
 
       <div className="bg-white/5 rounded-3xl border border-white/10 overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-white/5 text-gray-400 text-xs uppercase">
-            <tr><th className="p-4">Description</th><th className="p-4">CTN</th><th className="p-4">Qty</th><th className="p-4">Rate</th><th className="p-4">Total</th><th className="p-4"></th></tr>
+            <tr><th className="p-4">Description</th><th className="p-4">CTN</th><th className="p-4">Total Qty</th><th className="p-4">Rate</th><th className="p-4">Amount</th><th className="p-4"></th></tr>
           </thead>
           <tbody>
             {rows.map(r=>(
               <tr key={r.id} className="border-t border-white/5">
-                <td className="p-4">{r.brand} {r.sizeLabel}</td>
+                <td className="p-4 font-bold">{r.brand} - {r.sizeLabel}</td>
                 <td className="p-4">{r.totalCarton}</td>
                 <td className="p-4">{r.totalQty}</td>
                 <td className="p-4">{r.rate}</td>
-                <td className="p-4 font-bold">Rs. {r.total.toLocaleString()}</td>
+                <td className="p-4 font-black text-[#22c55e]">Rs. {r.total.toLocaleString()}</td>
                 <td className="p-4"><button onClick={()=>removeRow(r.id)}><Trash2 size={16} className="text-red-500"/></button></td>
               </tr>
             ))}
@@ -196,9 +191,10 @@ const SaleInvoice = () => {
       </div>
       
       <div className="mt-6 flex justify-end">
-        <div className="bg-[#22c55e] p-6 rounded-3xl text-black text-right min-w-[300px]">
-          <p className="font-bold opacity-70 uppercase text-xs">Grand Total</p>
-          <h2 className="text-4xl font-black">Rs. {grandTotal.toLocaleString()}</h2>
+        <div className="bg-[#22c55e] p-6 rounded-3xl text-black text-right min-w-[300px] shadow-xl">
+          <p className="font-bold opacity-60 uppercase text-[10px] tracking-widest">Grand Total</p>
+          <h2 className="text-4xl font-black tracking-tighter">Rs. {grandTotal.toLocaleString()}</h2>
+          <p className="text-[10px] font-bold italic mt-2 opacity-80">{toWords(grandTotal)}</p>
         </div>
       </div>
     </div>
