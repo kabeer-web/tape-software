@@ -1,94 +1,149 @@
-import { createContext, useState, useEffect, useCallback, useContext } from 'react';
-import { getInventory, addInventory, updateInventory, deleteInventory } from '../../api';
+import { useState, useContext, useEffect, useMemo } from 'react';
+import { StockContext } from './StockContext';
+import {
+  getInventoryByRoll, getProductions,
+  addProduction, updateProduction, deleteProduction, updateInventory
+} from '../../api';
+import {
+  Factory, Search, Plus, Trash2, Pencil, Check, X,
+  AlertTriangle, Info, Database, History, ArrowRight,
+  TrendingDown, CheckCircle2, Calculator, Calendar, Layers
+} from 'lucide-react';
 
-export const StockContext = createContext();
-export const useStock = () => useContext(StockContext);
+const Production = () => {
+  const { inventory, refreshInventory } = useContext(StockContext);
+  const [productions, setProductions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    date: new Date().toLocaleDateString('en-GB'),
+    rollNo: '',
+    producedQty: '',
+    waste: '0'
+  });
 
-const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
-
-export const StockProvider = ({ children }) => {
-  const [inventory, setInventory] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const refreshInventory = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await getInventory();
-      setInventory(data || []);
-    } catch (e) { 
-      console.error("Refresh Error:", e); 
-    } finally { 
-      setLoading(false); 
-    }
+  useEffect(() => {
+    loadProductions();
   }, []);
 
-  useEffect(() => { refreshInventory(); }, [refreshInventory]);
-
-  const generateNextRollNo = (currentInv) => {
-    const nums = currentInv
-      .filter(i => JAMBO_CATS.includes(i.category || i.type))
-      .map(i => parseInt(i.rollNo || i.roll_no || '0', 10))
-      .filter(n => !isNaN(n));
-    const maxNum = nums.length ? Math.max(...nums) : 0;
-    return String(maxNum + 1).padStart(3, '0');
-  };
-
-  const addRoll = async (item) => {
-    const isJambo = JAMBO_CATS.includes(item.category);
-    let finalRollNo = item.rollNo;
-    if (isJambo && !finalRollNo) {
-      finalRollNo = generateNextRollNo(inventory);
-    }
-
-    const payload = {
-      ...item,
-      rollNo: finalRollNo,
-      date: item.date || new Date().toLocaleDateString('en-GB')
-    };
-
+  const loadProductions = async () => {
     try {
-      const saved = await addInventory(payload);
-      setInventory(prev => [saved, ...prev]);
-      return saved;
-    } catch (e) {
-      console.error("Add Roll Error:", e);
-      throw e;
-    }
+      const data = await getProductions();
+      setProductions(data);
+    } catch (e) { console.error(e); }
   };
 
-  const adjustStock = async (item, field, delta) => {
-    const id = item._id || item.id;
-    const currentVal = Number(item[field]) || 0;
-    const newVal = Math.max(0, parseFloat((currentVal + delta).toFixed(4)));
-
-    try {
-      const updated = await updateInventory(id, { [field]: newVal });
-      setInventory(prev => prev.map(i => (i._id === id || i.id === id) ? { ...i, ...updated } : i));
-    } catch (e) {
-      console.error("Stock Adjust Error:", e);
-    }
-  };
-
-  const resetInventory = async () => {
-    if (!window.confirm("FATAL: Wipe entire inventory?")) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
       setLoading(true);
-      await Promise.all(inventory.map(i => deleteInventory(i._id || i.id)));
-      setInventory([]);
-      alert("Database wiped.");
-    } catch (e) {
-      alert("Reset failed: " + e.message);
-    } finally {
+      // 1. Search Roll
+      const roll = await getInventoryByRoll(form.rollNo);
+      if (!roll) {
+        alert("Roll number not found!");
+        return;
+      }
+
+      // 2. Save Production
+      const saved = await addProduction({
+        ...form,
+        roll_id: roll._id,
+        timestamp: new Date().toISOString()
+      });
+
+      // 3. Update Inventory (Reduce length or weight)
+      const newLength = Math.max(0, (roll.length || 0) - (parseFloat(form.producedQty) || 0));
+      await updateInventory(roll._id, { length: newLength });
+
+      alert("Production recorded successfully!");
+      setForm({ ...form, rollNo: '', producedQty: '' });
+      loadProductions();
       refreshInventory();
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this record?")) return;
+    try {
+      await deleteProduction(id);
+      loadProductions();
+    } catch (e) { alert(e.message); }
   };
 
   return (
-    <StockContext.Provider value={{ 
-      inventory, loading, refreshInventory, resetInventory, 
-      adjustStock, addRoll, setInventory 
-    }}>
-      {children}
-    </StockContext.Provider>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <Factory className="text-blue-600" /> Production Management
+        </h1>
+
+        {/* Entry Form */}
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Jambo Roll No</label>
+              <input 
+                type="text" 
+                className="w-full border rounded-lg p-2" 
+                value={form.rollNo}
+                onChange={e => setForm({...form, rollNo: e.target.value})}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Used Length (Mtrs)</label>
+              <input 
+                type="number" 
+                className="w-full border rounded-lg p-2" 
+                value={form.producedQty}
+                onChange={e => setForm({...form, producedQty: e.target.value})}
+                required
+              />
+            </div>
+            <div className="flex items-end">
+              <button 
+                disabled={loading}
+                className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
+              >
+                {loading ? 'Processing...' : 'Record Production'}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* History Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <table className="w-full text-left">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="p-4 font-semibold">Date</th>
+                <th className="p-4 font-semibold">Roll No</th>
+                <th className="p-4 font-semibold">Qty Used</th>
+                <th className="p-4 font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productions.map(p => (
+                <tr key={p._id} className="border-b hover:bg-gray-50">
+                  <td className="p-4">{p.date}</td>
+                  <td className="p-4 font-mono">{p.rollNo}</td>
+                  <td className="p-4">{p.producedQty} mtrs</td>
+                  <td className="p-4">
+                    <button onClick={() => handleDelete(p._id)} className="text-red-500 hover:text-red-700">
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 };
+
+export default Production;
