@@ -13,7 +13,7 @@ export const useAccounts = () => {
 };
 
 export const AccountsProvider = ({ children }) => {
-  const [bills,   setBills]   = useState([]);
+  const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,39 +28,38 @@ export const AccountsProvider = ({ children }) => {
     if (!key) return acc;
     const totalCarton = bill.items?.reduce((s, i) =>
       s + (parseFloat(i.totalCarton) || parseFloat(i.qty) || 0), 0) || 0;
+    
     const entry = {
-      billId: bill._id, billNo: bill.billNo,
-      date: bill.date, totalCarton, grandTotal: bill.grandTotal
+      billId: bill._id, 
+      billNo: bill.billNo,
+      date: bill.date, 
+      totalCarton, 
+      grandTotal: bill.grandTotal
     };
+    
     if (!acc[key]) acc[key] = { name: bill.partyName, type: bill.billType, entries: [] };
     acc[key].entries.push(entry);
     return acc;
   }, {});
 
-  // ✅ Bill save + auto ledger entry (bill_id se link hoti hai)
   const saveBill = async (billData) => {
     try {
       const saved = await addBill(billData);
       setBills(prev => [saved, ...prev]);
 
       if (saved.partyName && saved.grandTotal > 0) {
-        try {
-          const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
-          await addLedgerEntry({
-            party_name:  saved.partyName,
-            party_type:  saved.billType || 'Sale',
-            entry_type:  entryType,
-            description: `Bill #${saved.billNo || '—'} — ${saved.billType} Invoice`,
-            amount:      saved.grandTotal,
-            date:        saved.date,
-            ref_bill_no: saved.billNo || '',
-            bill_id:     saved._id,
-          });
-        } catch (ledgerErr) {
-          console.error('Auto ledger entry failed:', ledgerErr);
-        }
+        const entryType = saved.billType === 'Purchase' ? 'credit' : 'debit';
+        await addLedgerEntry({
+          party_name:  saved.partyName,
+          party_type:  saved.billType || 'Sale',
+          entry_type:  entryType,
+          description: `Bill #${saved.billNo || '—'} — ${saved.billType} Invoice`,
+          amount:      saved.grandTotal,
+          date:        saved.date,
+          ref_bill_no: saved.billNo || '',
+          bill_id:     saved._id,
+        });
       }
-
       return saved._id;
     } catch (err) {
       console.error('saveBill error:', err);
