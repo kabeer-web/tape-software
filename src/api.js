@@ -8,7 +8,7 @@ const mapId = (data) => {
   return { ...data, _id: data.id };
 };
 
-// Frontend (camelCase) <-> Backend (snake_case) Translator
+// Frontend (camelCase) <-> Backend (snake_case)
 const translateBill = (b) => {
   if (!b) return null;
   return {
@@ -19,16 +19,16 @@ const translateBill = (b) => {
     partyName: b.party_name,
     grandTotal: b.grand_total,
     totalCartonCount: b.total_carton_count,
-    cartonUsed: b.carton_used
+    cartonUsed: b.carton_used,
+    date: b.date,
+    items: b.items,
+    logo: b.logo
   };
 };
 
 // ─── INVENTORY API ───────────────────────────────────────
 export const getInventory = async () => {
-  const { data, error } = await supabase
-    .from('inventory')
-    .select('*')
-    .order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('inventory').select('*').order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return mapId(data);
 };
@@ -41,7 +41,6 @@ export const addInventory = async (item) => {
   };
   delete payload.rollNo; 
   delete payload._id;
-
   const { data, error } = await supabase.from('inventory').insert([payload]).select().single();
   if (error) throw new Error(error.message);
   return mapId(data);
@@ -70,7 +69,7 @@ export const getInventoryByRoll = async (rollNo) => {
   return mapId(data);
 };
 
-// ─── BILLS API (SNAKE_CASE MAPPING FIXED) ────────────────
+// ─── BILLS API (MAPPING FIXED) ───────────────────────────
 export const getBills = async () => {
   const { data, error } = await supabase.from('bills').select('*').order('date', { ascending: false });
   if (error) throw new Error(error.message);
@@ -89,12 +88,8 @@ export const addBill = async (billData) => {
     carton_used: billData.cartonUsed,
     logo: billData.logo
   };
-
   const { data, error } = await supabase.from('bills').insert([payload]).select().single();
-  if (error) {
-    console.error("DB Error:", error);
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
   return translateBill(data);
 };
 
