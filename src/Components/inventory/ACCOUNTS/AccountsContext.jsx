@@ -10,16 +10,17 @@ export const useAccounts = () => {
 };
 
 export const AccountsProvider = ({ children }) => {
-  const [bills, setBills] = useState([]);
+  const [bills, setBills] = useState([]); // Hamesha array rahega
   const [loading, setLoading] = useState(true);
 
   const refreshBills = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getBills();
-      setBills(data || []);
+      setBills(Array.isArray(data) ? data : []);
     } catch (e) { 
-      console.error("Bills Load Error:", e); 
+      console.error("Bills Load Error:", e);
+      setBills([]);
     } finally { 
       setLoading(false); 
     }
@@ -27,8 +28,8 @@ export const AccountsProvider = ({ children }) => {
 
   useEffect(() => { refreshBills(); }, [refreshBills]);
 
-  // Group parties from bills dynamically
-  const partiesSummary = bills.reduce((acc, bill) => {
+  // SAFE Logic: Agar bills load na hon toh empty object return karega
+  const partiesSummary = (bills || []).reduce((acc, bill) => {
     const name = bill.partyName?.trim().toUpperCase();
     if (!name) return acc;
     if (!acc[name]) acc[name] = { name, type: bill.billType, totalInvoices: 0, totalAmount: 0 };
@@ -41,8 +42,6 @@ export const AccountsProvider = ({ children }) => {
     try {
       const saved = await addBill(billData);
       setBills(prev => [saved, ...prev]);
-
-      // Auto-Posting to Ledger
       if (saved.partyName && saved.grandTotal > 0) {
         const isSale = saved.billType === 'Sale';
         await addLedgerEntry({
@@ -62,24 +61,21 @@ export const AccountsProvider = ({ children }) => {
     }
   };
 
-  const updateBillData = async (id, updatedBill) => {
-    try {
-      const updated = await updateBill(id, updatedBill);
-      setBills(prev => prev.map(b => b._id === id ? updated : b));
-    } catch (err) { console.error('updateBill error:', err); }
-  };
-
-  const deleteBillData = async (id) => {
-    try {
-      await deleteBill(id);
-      setBills(prev => prev.filter(b => b._id !== id));
-    } catch (err) { console.error('deleteBill error:', err); }
-  };
-
   return (
     <AccountsContext.Provider value={{
-      bills, partiesSummary, loading, refreshBills,
-      saveBill, updateBill: updateBillData, deleteBill: deleteBillData,
+      bills: bills || [],
+      partiesSummary: partiesSummary || {}, // Yeh line crash hone se bachayegi
+      loading,
+      refreshBills,
+      saveBill,
+      updateBill: async (id, upd) => {
+        await updateBill(id, upd);
+        refreshBills();
+      },
+      deleteBill: async (id) => {
+        await deleteBill(id);
+        refreshBills();
+      }
     }}>
       {children}
     </AccountsContext.Provider>
