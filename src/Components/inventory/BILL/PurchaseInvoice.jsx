@@ -4,10 +4,10 @@ import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { getLedgerEntries } from '../../../api';
 import {
   Plus, Trash2, Save, FileText, Package, Archive, Layers,
-  Printer, Upload, X, ChevronDown
+  Printer, Upload, X, ChevronDown, Calculator, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
-// --- PARTIES LIST DIRECTLY INSIDE ---
+// --- CONSTANTS ---
 const PURCHASE_PARTIES = [
   'UNIVERSAL COTTING','KOSHER','CHAWLA INDUSTRY',
   'IBAD CORE','TAHSEEN CARTON','TALHA WASEEM',
@@ -15,8 +15,86 @@ const PURCHASE_PARTIES = [
 ];
 
 const JAMBO_CATEGORIES = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
-const CARTON_SIZES = [10, 10.5, 11, 12];
-const PLY_OPTIONS = [5, 6, 8, 10];
+const CARTON_SIZES = ['10', '10.5', '11', '12'];
+const PLY_OPTIONS = ['5', '6', '8', '10'];
+const BRANDS = ['Tesco','Bell','Race','Jhonson','Local','Imported'];
+
+// --- Number to words logic ---
+const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const tens  = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+function numToWords(n) {
+  if (n===0) return 'zero';
+  if (n<20) return ones[n];
+  if (n<100) return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:'');
+  if (n<1000) return ones[Math.floor(n/100)]+' hundred'+(n%100?' '+numToWords(n%100):'');
+  if (n<100000) return numToWords(Math.floor(n/1000))+' thousand'+(n%1000?' '+numToWords(n%1000):'');
+  if (n<10000000) return numToWords(Math.floor(n/100000))+' lac'+(n%100000?' '+numToWords(n%100000):'');
+  return numToWords(Math.floor(n/10000000))+' crore'+(n%10000000?' '+numToWords(n%10000000):'');
+}
+const toWords = (n) => {
+  const r = Math.round(n);
+  if (!r) return 'Zero Rupees Only';
+  const w = numToWords(r);
+  return w[0].toUpperCase() + w.slice(1) + ' Rupees Only';
+};
+
+const ADDR  = 'PLOT #356-5, SECTOR 5-B, SAEEDABAD BALDIA TOWN S.I.T.E KARACHI';
+
+// --- HTML Print Generator ---
+const generatePurchasePrintHTML = (bill) => {
+  const { billNo, partyName, date, items, grandTotal, chalanNo } = bill;
+  const rowsHtml = items.map((r, i) => `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td><b>${r.mainCategory}</b></td>
+      <td>${r.specsLabel}</td>
+      <td style="text-align:center">${r.qty}</td>
+      <td style="text-align:right">${r.rate.toLocaleString()}</td>
+      <td style="text-align:right;font-weight:bold">${r.amount.toLocaleString()}</td>
+    </tr>`).join('');
+
+  return `<!DOCTYPE html><html><head><title>Purchase Bill #${billNo}</title>
+<style>
+  body{font-family:sans-serif;font-size:12px;padding:40px;color:#000}
+  .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #000;padding-bottom:15px;margin-bottom:20px}
+  .meta-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:15px;margin-bottom:25px}
+  .meta-item{border:1px solid #ddd;padding:10px;border-radius:5px}
+  .meta-label{font-size:9px;text-transform:uppercase;color:#666;font-weight:bold}
+  table{width:100%;border-collapse:collapse;margin-bottom:25px}
+  th{background:#f4f4f4;padding:10px;border:1.5px solid #000;text-transform:uppercase;font-size:10px}
+  td{padding:10px;border:1px solid #ddd}
+  .footer-area{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+  .total-card{width:250px;border:2.5px solid #000;padding:15px;text-align:center}
+  .sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:50px;margin-top:80px}
+  .sig-line{border-top:1.5px solid #000;text-align:center;padding-top:8px;font-weight:bold;text-transform:uppercase}
+</style></head><body>
+<div class="hdr">
+  <div><h1 style="margin:0;font-size:24px">HS PACKAGES</h1><p>${ADDR}</p></div>
+  <div style="text-align:right"><h1>PURCHASE BILL</h1><p>Original Record</p></div>
+</div>
+<div class="meta-grid">
+  <div class="meta-item"><div class="meta-label">Supplier</div><div style="font-size:14px;font-weight:bold">${partyName}</div></div>
+  <div class="meta-item"><div class="meta-label">Bill / Chalan No</div><div style="font-size:14px;font-weight:bold">#${billNo} / ${chalanNo || '—'}</div></div>
+  <div class="meta-item"><div class="meta-label">Date</div><div style="font-size:14px;font-weight:bold">${date}</div></div>
+</div>
+<table>
+  <thead><tr><th>#</th><th>Category</th><th>Specifications</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+  <tbody>${rowsHtml}</tbody>
+</table>
+<div class="footer-area">
+  <div style="flex:1;border:1px solid #ddd;padding:15px;border-radius:5px">
+    <div class="meta-label">Amount in Words</div>
+    <div style="font-style:italic;font-weight:bold;margin-top:5px">"${toWords(grandTotal)}"</div>
+  </div>
+  <div class="total-card">
+    <div class="meta-label">Net Payable (PKR)</div>
+    <div style="font-size:24px;font-weight:900">${grandTotal.toLocaleString()}</div>
+  </div>
+</div>
+<div class="sigs"><div class="sig-line">Purchase Manager</div><div class="sig-line">Warehouse Incharge</div><div class="sig-line">Accounts Dept</div></div>
+<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
+</body></html>`;
+};
 
 const emptyForm = {
   mainCategory: 'Core',
@@ -24,55 +102,6 @@ const emptyForm = {
   cartonType:'', size:'',
   jamboCategory:'', color:'', micron:'', width:'',
   qty:'', rate:''
-};
-
-const PartyPicker = ({ value, onChange, options, placeholder, onSelect, onBlur }) => {
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef(null);
-
-  useEffect(() => {
-    const onClick = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
-
-  const filtered = (value || '').trim() === ''
-    ? options
-    : options.filter(o => o.toLowerCase().includes(value.toLowerCase()));
-  const exactMatch = options.some(o => o.toLowerCase() === (value || '').trim().toLowerCase());
-
-  return (
-    <div className="relative" ref={boxRef}>
-      <div className="relative">
-        <input
-          value={value}
-          onChange={e => { onChange(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => { if (onBlur) onBlur(value); }}
-          placeholder={placeholder}
-          autoComplete="off"
-          className="w-full mt-1 bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]/50 text-sm pr-8"
-        />
-        <ChevronDown size={14} className="absolute right-3 top-[22px] text-gray-500 pointer-events-none" />
-      </div>
-      {open && (
-        <div className="absolute z-30 mt-1 w-full max-h-52 overflow-y-auto bg-[#0c0c0c] border border-[#22c55e]/30 rounded-xl shadow-2xl">
-          {filtered.length === 0 && (
-            <p className="px-3 py-2.5 text-xs text-gray-500">Koi supplier nahi mila</p>
-          )}
-          {filtered.map(o => (
-            <button
-              key={o} type="button"
-              onMouseDown={() => { onChange(o); onSelect && onSelect(o); setOpen(false); }}
-              className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-[#22c55e]/10 hover:text-[#22c55e] transition border-b border-white/5 last:border-0"
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 };
 
 const PurchaseInvoice = () => {
@@ -85,185 +114,181 @@ const PurchaseInvoice = () => {
   const [date, setDate] = useState(new Date().toLocaleDateString('en-GB'));
   const [form, setForm] = useState(emptyForm);
   const [rows, setRows] = useState([]);
-  const [savedMsg, setSavedMsg] = useState('');
-  const [savedOk, setSavedOk] = useState(true);
-  const [logo, setLogo] = useState(null);
+  const [msg, setMsg] = useState({ text: '', ok: true });
   const [saving, setSaving] = useState(false);
-  const fileRef = useRef(null);
   const [partyBalance, setPartyBalance] = useState(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-
-  const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
-  const switchCategory = (cat) => setForm({ ...emptyForm, mainCategory: cat });
 
   const flash = (text, ok = true) => {
-    setSavedMsg(text); setSavedOk(ok);
-    setTimeout(() => setSavedMsg(''), 5000);
+    setMsg({ text, ok });
+    setTimeout(() => setMsg({ text: '', ok: true }), 5000);
   };
 
   const fetchPartyBalance = async (name) => {
-    if (!name || !name.trim()) { setPartyBalance(null); return; }
-    setBalanceLoading(true);
+    if (!name || !name.trim()) return;
     try {
       const entries = await getLedgerEntries(name.trim());
       const totalDebit  = entries.filter(e => e.entry_type === 'debit' ).reduce((s,e)=>s+(Number(e.amount)||0),0);
       const totalCredit = entries.filter(e => e.entry_type === 'credit').reduce((s,e)=>s+(Number(e.amount)||0),0);
-      setPartyBalance({ balance: totalDebit - totalCredit });
-    } catch (err) { setPartyBalance(null); } 
-    finally { setBalanceLoading(false); }
+      setPartyBalance(totalDebit - totalCredit);
+    } catch (err) { setPartyBalance(null); }
   };
 
   const buildSpecsLabel = (f) => {
-    if (f.mainCategory === 'Core') return `${f.brand} / ${f.side} / ${f.ply} Ply`;
-    if (f.mainCategory === 'Carton') return `${f.brand} / ${f.cartonType} / ${f.size}"`;
-    return `${f.jamboCategory}${f.color?' / '+f.color:''}${f.micron?' / '+f.micron+'μ':''}${f.width?' / '+f.width+'mm':''}`;
-  };
-
-  const isFormValid = () => {
-    const f = form;
-    if (!f.qty || !f.rate) return false;
-    if (f.mainCategory === 'Core') return f.brand && f.side && f.ply;
-    if (f.mainCategory === 'Carton') return f.brand && f.cartonType && f.size;
-    if (f.mainCategory === 'Jambo') return f.jamboCategory;
-    return false;
+    if (f.mainCategory === 'Core') return `${f.brand} | ${f.side} | ${f.ply} Ply`;
+    if (f.mainCategory === 'Carton') return `${f.brand} | ${f.cartonType} | ${f.size}"`;
+    return `${f.jamboCategory} ${f.micron ? f.micron+'μ' : ''} ${f.width ? f.width+'mm' : ''} ${f.color || ''}`;
   };
 
   const addItem = () => {
-    if (!isFormValid()) { flash('❌ Sab required fields fill karein', false); return; }
     const qty = parseFloat(form.qty);
     const rate = parseFloat(form.rate);
-    const amount = qty * rate;
-    setRows(prev => [...prev, {
-      id: Date.now(), ...form, qty, rate, amount,
+    if (!qty || !rate) return flash('❌ Qty aur Rate bharein', false);
+
+    setRows(p => [...p, {
+      id: Date.now(), ...form, qty, rate, amount: qty * rate,
       specsLabel: buildSpecsLabel(form)
     }]);
     setForm({ ...emptyForm, mainCategory: form.mainCategory });
   };
 
-  const removeRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
-  const grandTotal = rows.reduce((sum, r) => sum + r.amount, 0);
+  const removeRow = (id) => setRows(p => p.filter(r => r.id !== id));
+  const grandTotal = rows.reduce((s, r) => s + r.amount, 0);
 
   const handleSaveBill = async () => {
-    if (!supplierName.trim()) { flash('❌ Supplier select/likhein', false); return; }
-    if (rows.length === 0)    { flash('❌ Pehle koi item add karein', false); return; }
-    if (!window.confirm(`${rows.length} items ki stock add ho jayegi. Confirm karein?`)) return;
+    if (!supplierName.trim() || rows.length === 0) return flash('❌ Form incomplete hai', false);
+    if (!window.confirm(`Kya aap ${rows.length} items ka stock add karna chahte hain?`)) return;
 
     setSaving(true);
     try {
-      // Stock Update
+      // 1. Update Stock for each row
       for (const r of rows) {
-        if (r.mainCategory === 'Core') {
-          await addRoll({ category:'Core', brand:r.brand, side:r.side, ply:r.ply, qty:r.qty });
-        } else if (r.mainCategory === 'Carton') {
-          await addRoll({ category:'Carton', brand:r.brand, cartonType:r.cartonType, size:r.size, qty:r.qty });
-        } else if (r.mainCategory === 'Jambo') {
-          await addRoll({ category: r.jamboCategory, color: r.color, micron: r.micron, width: r.width, yards: r.qty });
-        }
+        let payload = { category: r.mainCategory, brand: r.brand, qty: r.qty };
+        if (r.mainCategory === 'Core') payload = { ...payload, side: r.side, ply: r.ply };
+        if (r.mainCategory === 'Carton') payload = { ...payload, carton_type: r.cartonType, size: r.size };
+        if (r.mainCategory === 'Jambo') payload = { category: r.jamboCategory, micron: r.micron, width: r.width, yards: r.qty, color: r.color };
+        
+        await addRoll(payload);
       }
 
-      // Ledger Update via AccountsContext
+      // 2. Save Bill and update Ledger
       await saveBill({
-        billType: 'Purchase', // This creates a Credit entry for the supplier
+        billType: 'Purchase',
         billNo,
-        partyName: supplierName,
+        partyName: supplierName.toUpperCase(),
         date,
         items: rows,
         grandTotal,
+        chalanNo
       });
 
-      flash(`✅ Bill Saved & Ledger Updated!`);
-      setRows([]); setBillNo(''); setSupplierName(''); setPartyBalance(null);
-    } catch (err) { flash('❌ Error: ' + err.message, false); } 
+      flash(`✅ Purchase Recorded & Stock Updated!`);
+      setRows([]); setBillNo(''); setSupplierName(''); setChalanNo('');
+    } catch (err) { flash('❌ Error: ' + err.message, false); }
     finally { setSaving(false); }
   };
 
-  const printBill = () => {
-    const rowsHtml = rows.map((r, idx) => `
-      <tr><td>${idx+1}</td><td>${r.mainCategory}</td><td>${r.specsLabel}</td><td>${r.qty}</td><td>${r.rate.toLocaleString()}</td><td><b>${r.amount.toLocaleString()}</b></td></tr>
-    `).join('');
-    const win = window.open('', '_blank');
-    win.document.write(`<html><body onload="window.print()"><h2>Purchase Bill #${billNo}</h2><p>Supplier: ${supplierName}</p><table border="1" width="100%"><thead><tr><th>#</th><th>Cat</th><th>Specs</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead><tbody>${rowsHtml}</tbody></table><h3>Grand Total: ${grandTotal.toLocaleString()}</h3></body></html>`);
-    win.document.close();
+  const handlePrint = () => {
+    if (rows.length === 0) return;
+    const html = generatePurchasePrintHTML({ billNo, partyName: supplierName.toUpperCase(), date, items: rows, grandTotal, chalanNo });
+    const w = window.open('', '_blank'); w.document.write(html); w.document.close();
   };
 
   return (
-    <div className="text-white min-h-screen">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
-        <div className="flex items-center gap-3">
-          <FileText className="text-[#22c55e]" size={26} />
-          <h1 className="text-2xl md:text-3xl font-black">PURCHASE <span className="text-[#22c55e]">INVOICE</span></h1>
+    <div className="max-w-7xl mx-auto px-4 py-8 text-slate-200">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+        <div>
+          <h1 className="text-4xl font-black tracking-tighter text-white flex items-center gap-3">
+            <Archive className="text-[#22c55e]" size={36} />
+            PURCHASE <span className="text-[#22c55e] italic">INVOICE</span>
+          </h1>
+          <p className="text-slate-500 text-sm font-bold uppercase tracking-widest mt-1">Raw Material & Inventory Inward</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={handleSaveBill} disabled={rows.length === 0 || saving} className="bg-white/[0.05] border border-[#22c55e]/30 text-[#22c55e] px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-[#22c55e]/10 transition disabled:opacity-30 text-sm">
-            {saving ? <div className="w-4 h-4 border-2 border-t-transparent animate-spin rounded-full"/> : <Save size={15}/>} Save & Stock
+          <button onClick={handleSaveBill} disabled={rows.length === 0 || saving} className="bg-white/[0.05] border border-[#22c55e]/30 text-[#22c55e] px-6 py-3 rounded-2xl font-black flex items-center gap-2 hover:bg-[#22c55e]/10 transition disabled:opacity-20 uppercase text-xs tracking-widest">
+            {saving ? <div className="w-4 h-4 border-2 border-t-transparent animate-spin rounded-full"/> : <Save size={16}/>} Save Bill
           </button>
-          <button onClick={printBill} disabled={rows.length === 0} className="bg-[#22c55e] text-black font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 hover:bg-[#1db954] transition disabled:opacity-30 text-sm"><Printer size={15}/> Print</button>
+          <button onClick={handlePrint} disabled={rows.length === 0} className="bg-[#22c55e] text-black font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 active:scale-95 transition uppercase text-xs tracking-widest shadow-lg shadow-emerald-500/20">
+            <Printer size={16}/> Print Bill
+          </button>
         </div>
       </div>
 
-      {savedMsg && <div className={`p-3 rounded-xl mb-5 text-sm font-bold border ${savedOk ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]' : 'bg-red-500/10 border-red-500/40 text-red-400'}`}>{savedMsg}</div>}
+      {msg.text && (
+        <div className={`mb-8 p-4 rounded-2xl flex items-center gap-3 border animate-in slide-in-from-top-4 duration-500 ${msg.ok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
+          {msg.ok ? <CheckCircle2 size={20}/> : <AlertCircle size={20}/>}
+          <span className="font-bold text-sm">{msg.text}</span>
+        </div>
+      )}
 
-      <div className="bg-white/[0.03] backdrop-blur-xl p-6 rounded-2xl border border-[#22c55e]/20 mb-5">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase font-bold">Supplier</label>
-            <PartyPicker value={supplierName} onChange={setSupplierName} options={PURCHASE_PARTIES} placeholder="Select Supplier" onSelect={fetchPartyBalance} />
+      {/* Main Info Card */}
+      <div className="bg-white/[0.02] border border-white/5 p-8 rounded-[2.5rem] mb-6 shadow-inner">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Supplier Name</label>
+            <input list="purchase-parties" value={supplierName} onChange={e=>setSupplierName(e.target.value)} onBlur={()=>fetchPartyBalance(supplierName)} placeholder="Select/Type Supplier" className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#22c55e] font-bold" />
+            <datalist id="purchase-parties">{PURCHASE_PARTIES.map(p=><option key={p} value={p}/>)}</datalist>
           </div>
-          <div><label className="text-[10px] text-gray-500 uppercase font-bold">Bill #</label><input value={billNo} onChange={e=>setBillNo(e.target.value)} className="w-full mt-1 bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/></div>
-          <div><label className="text-[10px] text-gray-500 uppercase font-bold">Chalan</label><input value={chalanNo} onChange={e=>setChalanNo(e.target.value)} className="w-full mt-1 bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/></div>
-          <div><label className="text-[10px] text-gray-500 uppercase font-bold">Date</label><input value={date} onChange={e=>setDate(e.target.value)} className="w-full mt-1 bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/></div>
+          <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Bill Number</label><input value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="000" className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#22c55e] font-bold" /></div>
+          <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Chalan / DC</label><input value={chalanNo} onChange={e=>setChalanNo(e.target.value)} placeholder="Optional" className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#22c55e] font-bold" /></div>
+          <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Date</label><input value={date} onChange={e=>setDate(e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none font-bold" /></div>
         </div>
+        {partyBalance !== null && <p className="mt-4 text-[11px] font-black text-[#22c55e] uppercase tracking-tighter bg-[#22c55e]/5 w-fit px-4 py-1.5 rounded-full border border-[#22c55e]/20">Current Balance: Rs. {partyBalance.toLocaleString()}</p>}
       </div>
 
-      <div className="bg-white/[0.03] p-6 rounded-2xl border border-[#22c55e]/20 mb-5">
-        <div className="flex gap-2 mb-4">
+      {/* Entry Form */}
+      <div className="bg-white/[0.02] border border-white/5 p-8 rounded-[2.5rem] mb-6">
+        <div className="flex p-1.5 bg-black/40 border border-white/5 rounded-2xl w-fit mb-8">
           {['Core','Carton','Jambo'].map(cat => (
-            <button key={cat} onClick={()=>switchCategory(cat)} className={`px-4 py-2 rounded-xl text-sm font-bold border transition ${form.mainCategory===cat?'bg-[#22c55e] text-black':'bg-black/30 text-gray-400 border-white/10'}`}>{cat}</button>
+            <button key={cat} onClick={()=>setForm({...emptyForm, mainCategory: cat})} className={`px-8 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${form.mainCategory===cat?'bg-[#22c55e] text-black shadow-lg shadow-emerald-500/20':'text-slate-500 hover:text-white'}`}>{cat}</button>
           ))}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 items-end">
           {form.mainCategory === 'Core' && (
-            <><input value={form.brand} onChange={e=>updateForm('brand',e.target.value)} placeholder="Brand" className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/><select value={form.side} onChange={e=>updateForm('side',e.target.value)} className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"><option value="">Side</option><option value="Single">Single</option><option value="Double">Double</option></select><select value={form.ply} onChange={e=>updateForm('ply',e.target.value)} className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"><option value="">Ply</option>{PLY_OPTIONS.map(p=><option key={p} value={p}>{p}</option>)}</select></>
+            <>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Brand</label><select value={form.brand} onChange={e=>setForm({...form, brand:e.target.value})} className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold cursor-pointer">{BRANDS.map(b=><option key={b} value={b}>{b}</option>)}</select></div>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Side</label><select value={form.side} onChange={e=>setForm({...form, side:e.target.value})} className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold cursor-pointer"><option value="">Side</option><option value="Single">Single</option><option value="Double">Double</option></select></div>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Ply</label><select value={form.ply} onChange={e=>setForm({...form, ply:e.target.value})} className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold cursor-pointer"><option value="">Ply</option>{PLY_OPTIONS.map(p=><option key={p} value={p}>{p} Ply</option>)}</select></div>
+            </>
           )}
           {form.mainCategory === 'Carton' && (
-            <><input value={form.brand} onChange={e=>updateForm('brand',e.target.value)} placeholder="Brand" className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/><select value={form.cartonType} onChange={e=>updateForm('cartonType',e.target.value)} className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"><option value="">Type</option><option value="Small">Small</option><option value="Large">Large</option></select><select value={form.size} onChange={e=>updateForm('size',e.target.value)} className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"><option value="">Size</option>{CARTON_SIZES.map(s=><option key={s} value={s}>{s}</option>)}</select></>
+            <>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Brand</label><select value={form.brand} onChange={e=>setForm({...form, brand:e.target.value})} className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold cursor-pointer">{BRANDS.map(b=><option key={b} value={b}>{b}</option>)}</select></div>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Type</label><select value={form.cartonType} onChange={e=>setForm({...form, cartonType:e.target.value})} className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold cursor-pointer"><option value="">Type</option><option value="Small">Small</option><option value="Large">Large</option></select></div>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Size</label><select value={form.size} onChange={e=>setForm({...form, size:e.target.value})} className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold cursor-pointer"><option value="">Size</option>{CARTON_SIZES.map(s=><option key={s} value={s}>{s}"</option>)}</select></div>
+            </>
           )}
           {form.mainCategory === 'Jambo' && (
-            <><select value={form.jamboCategory} onChange={e=>updateForm('jamboCategory',e.target.value)} className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"><option value="">Jambo Type</option>{JAMBO_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select><input value={form.micron} onChange={e=>updateForm('micron',e.target.value)} placeholder="Micron" className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/><input value={form.width} onChange={e=>updateForm('width',e.target.value)} placeholder="Width mm" className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/></>
+            <>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Type</label><select value={form.jamboCategory} onChange={e=>setForm({...form, jamboCategory:e.target.value})} className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold cursor-pointer"><option value="">Select Jambo</option>{JAMBO_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Micron</label><input value={form.micron} onChange={e=>setForm({...form, micron:e.target.value})} placeholder="μ" className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold" /></div>
+              <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Width</label><input value={form.width} onChange={e=>setForm({...form, width:e.target.value})} placeholder="mm" className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold" /></div>
+            </>
           )}
-          <input type="number" value={form.qty} onChange={e=>updateForm('qty',e.target.value)} placeholder="Qty" className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/>
-          <input type="number" value={form.rate} onChange={e=>updateForm('rate',e.target.value)} placeholder="Rate" className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/>
-          <button onClick={addItem} disabled={!isFormValid()} className="bg-[#22c55e] text-black font-bold rounded-xl py-2.5 hover:bg-[#1db954] disabled:opacity-30"><Plus size={16} className="inline mr-1"/> Add</button>
+          <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Quantity</label><input type="number" value={form.qty} onChange={e=>setForm({...form, qty:e.target.value})} placeholder="0" className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold" /></div>
+          <div className="space-y-1"><label className="text-[9px] font-bold text-slate-600 uppercase ml-1">Rate</label><input type="number" value={form.rate} onChange={e=>setForm({...form, rate:e.target.value})} placeholder="0" className="w-full bg-black/40 p-3.5 rounded-xl border border-white/10 outline-none text-sm font-bold" /></div>
+          <button onClick={addItem} className="bg-[#22c55e] text-black font-black p-3.5 rounded-xl flex items-center justify-center hover:bg-emerald-400 transition shadow-lg shadow-emerald-500/10"><Plus size={20}/></button>
         </div>
       </div>
 
-      <div className="bg-white/[0.03] rounded-2xl border border-white/10 overflow-hidden mb-5">
+      {/* Item Table */}
+      <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden mb-8 shadow-inner">
         <table className="w-full text-left">
-          <thead className="bg-black/30 text-gray-500 text-xs uppercase">
-            <tr><th className="p-3">#</th><th className="p-3">Category</th><th className="p-3">Specs</th><th className="p-3">Qty</th><th className="p-3">Rate</th><th className="p-3">Total</th><th className="p-3"></th></tr>
+          <thead className="bg-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+            <tr><th className="p-6">#</th><th>Category</th><th>Specs</th><th>Qty</th><th>Rate</th><th>Amount</th><th className="text-right p-6">Action</th></tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-white/5">
             {rows.map((r, i) => (
-              <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                <td className="p-3 text-xs text-gray-500">{i+1}</td>
-                <td className="p-3 text-[#22c55e] font-bold text-sm">{r.mainCategory}</td>
-                <td className="p-3 text-sm text-gray-300 font-mono">{r.specsLabel}</td>
-                <td className="p-3 text-sm">{r.qty}</td>
-                <td className="p-3 text-sm">{r.rate.toLocaleString()}</td>
-                <td className="p-3 font-bold text-sm">{r.amount.toLocaleString()}</td>
-                <td className="p-3"><button onClick={()=>removeRow(r.id)} className="text-gray-500 hover:text-red-500"><Trash2 size={15}/></button></td>
+              <tr key={r.id} className="hover:bg-white/5 transition-all group">
+                <td className="p-6 text-sm font-bold text-slate-600">{i+1}</td>
+                <td className="p-6 font-black text-[#22c55e] uppercase text-xs">{r.mainCategory}</td>
+                <td className="p-6 text-sm font-bold text-slate-300">{r.specsLabel}</td>
+                <td className="p-6 font-mono text-sm">{r.qty}</td>
+                <td className="p-6 font-mono text-sm">{r.rate.toLocaleString()}</td>
+                <td className="p-6 font-black text-white">Rs. {r.amount.toLocaleString()}</td>
+                <td className="p-6 text-right"><button onClick={()=>removeRow(r.id)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-lg"><Trash2 size={16}/></button></td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20 flex justify-between items-center">
-        <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">Grand Total</span>
-        <span className="text-3xl font-black text-[#22c55e]">Rs. {grandTotal.toLocaleString()}</span>
-      </div>
-    </div>
-  );
-};
-
-export default PurchaseInvoice;
+            {rows.length === 0 && (
+              <tr><td colSpan={7} className="p-20 text-center text-slate-600 font-bold uppercase tracking-widest italic">No items added to invoice yet.</td></tr>
