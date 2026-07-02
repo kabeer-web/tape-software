@@ -53,24 +53,45 @@ const Production = () => {
 
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  // Fix 1: Search logic refined
-  const handleSearch = async () => {
-    const raw = rollInput.trim();
-    setRollErr(''); setRollFound(null);
-    if (!raw) { setRollErr('Roll number likhein pehle'); return; }
-    setRollLoading(true);
-    try {
-      const found = await getInventoryByRoll(raw);
-      if (!found) setRollErr(`Roll #${raw} inventory mein nahi mila`);
-      else if (['Core', 'Carton'].includes(found.category)) setRollErr(`Roll #${raw} ek ${found.category} hai — Jambo roll chahiye`);
-      else if (Number(found.yards || 0) <= 0) setRollErr(`Roll #${raw} ki yards khatam ho gayi hain`);
-      else setRollFound(found);
-    } catch (err) { setRollErr('Search error: ' + err.message); }
-    finally { setRollLoading(false); }
-  };
+ // Production.jsx ke andar handleSearch function ko update karein:
+const handleSearch = async () => {
+  let raw = rollInput.trim();
+  setRollErr(''); setRollFound(null);
+  if (!raw) { setRollErr('Roll number likhein pehle'); return; }
+  
+  setRollLoading(true);
+  try {
+    // Try 1: As entered (e.g. "042")
+    let found = await getInventoryByRoll(raw);
+    
+    // Try 2: As number (e.g. "42") agar pehle nahi mila
+    if (!found && raw.startsWith('0')) {
+      const numOnly = parseInt(raw, 10).toString();
+      found = await getInventoryByRoll(numOnly);
+    }
 
-  const clearRoll = () => { setRollInput(''); setRollFound(null); setRollErr(''); };
-
+    if (!found) {
+      setRollErr(`Roll #${raw} inventory mein nahi mila. Check karein ke Inventory mein ye roll exist karta hai ya nahi.`);
+    } else {
+      // Check if it's actually a Jambo roll
+      const cat = (found.category || found.type || '').toLowerCase();
+      const isJambo = !['core', 'carton', 'tape'].includes(cat);
+      
+      if (!isJambo) {
+        setRollErr(`Roll #${raw} ek ${found.category} hai — Sirf Jambo rolls production mein use ho sakte hain.`);
+      } else if (Number(found.yards || found.length || 0) <= 0) {
+        setRollErr(`Roll #${raw} ki yards/length khatam ho gayi hai (Stock: 0).`);
+      } else {
+        // Success
+        setRollFound(found);
+      }
+    }
+  } catch (err) { 
+    setRollErr('Search error: ' + err.message); 
+  } finally { 
+    setRollLoading(false); 
+  }
+};
   // Fix 2: Core matching logic
   const coreItem = useMemo(() => {
     if (!form.coreBrand || !form.coreSide || !form.corePly) return null;
