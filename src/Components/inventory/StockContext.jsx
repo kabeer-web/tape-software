@@ -5,10 +5,13 @@ export const StockContext = createContext();
 export const useStock = () => useContext(StockContext);
 
 const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
-
+// StockContext.jsx ke upar initialize hamesha array se karein:
 export const StockProvider = ({ children }) => {
-  const [inventory, setInventory] = useState([]);
+  const [inventory, setInventory] = useState([]); // Array guarantee
   const [loading, setLoading] = useState(true);
+
+  // ... fetch inventory code ...
+  // setInventory(data || []); // Kabhi null nahi bhejna
 
   const refreshInventory = useCallback(async () => {
     try {
