@@ -37,7 +37,6 @@ const handleAdd = async (e) => {
       qty: Number(qty)
     });
     setQty('');
-    alert("Stock Added!");
   } catch (err) {
     alert("Error adding stock");
   }
