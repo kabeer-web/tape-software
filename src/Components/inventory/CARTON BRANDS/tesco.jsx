@@ -23,12 +23,23 @@ const tesco = () => {
   const totalQty = filtered.reduce((s, i) => s + (Number(i.qty) || 0), 0);
   const lowCount = filtered.filter(i => Number(i.qty) < LOW).length;
 
-  const handleAdd = (e) => {
-    e.preventDefault();
-    if (!cartonType || !size || !qty) return;
-    addRoll({ brand: BRAND, cartonType, size, qty: parseInt(qty), category: 'Carton' });
+const handleAdd = async (e) => {
+  e.preventDefault();
+  if (!cartonType || !size || !qty) return;
+  
+  try {
+    await addRoll({ 
+      brand: BRAND, 
+      category: 'Carton',
+      carton_type: cartonType, // DB column
+      size: String(size), 
+      qty: Number(qty)
+    });
     setQty('');
-  };
+  } catch (err) {
+    alert("Error adding stock");
+  }
+};
 
   const handleRemove = (id) => {
     if (!window.confirm('Pakka remove karna hai?')) return;
