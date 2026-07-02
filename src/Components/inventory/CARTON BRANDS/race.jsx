@@ -6,8 +6,8 @@ const LOW = 20;
 const BRAND = 'Race'; // Race, Tesco, Jhonson ke liye ye badlo
 const SIZES = [10, 10.5, 11, 12];
 
-const race = () => {
-  const { inventory, addRoll, updateStock, removeItem, loading } = useContext(StockContext);
+const Race = () => {
+  const { inventory, upsertStock, updateStock, removeItem, loading } = useContext(StockContext);
   const [cartonType, setCartonType] = useState('');
   const [size, setSize] = useState('');
   const [qty, setQty] = useState('');
@@ -27,13 +27,12 @@ const handleAdd = async (e) => {
   if (!cartonType || !size || !qty) return;
   
   try {
-    await addRoll({ 
-      brand: BRAND, 
+    await upsertStock({
+      brand: BRAND,
       category: 'Carton',
       carton_type: cartonType, // DB column
-      size: String(size), 
-      qty: Number(qty)
-    });
+      size: String(size),
+    }, Number(qty));
     setQty('');
   } catch (err) {
     alert("Error adding stock");
@@ -160,4 +159,4 @@ const handleAdd = async (e) => {
   );
 };
 
-export default race;
+export default Race;
