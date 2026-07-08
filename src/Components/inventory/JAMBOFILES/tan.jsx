@@ -26,16 +26,23 @@ const Tan = () => { // Capitalized component name (Standard Practice)
     const f = new FormData(e.target);
     const yards = parseFloat(f.get('yards'));
     if (!yards || yards <= 0) return;
+    const weight = parseFloat(f.get('weight')) || 0;
 
-    // FIX: type 'Tan' (Capital T) bhejein
-    await addRoll({ 
-      category: 'Tan', 
-      type: 'Tan', 
-      micron: f.get('micron'), 
-      width: f.get('width'), 
-      yards 
-    });
-    e.target.reset();
+    try {
+      // FIX: type 'Tan' (Capital T) bhejein
+      await addRoll({ 
+        category: 'Tan', 
+        type: 'Tan', 
+        micron: f.get('micron'), 
+        width: f.get('width'), 
+        yards,
+        weight
+      });
+      e.target.reset();
+    } catch (err) {
+      console.error(err);
+      alert('Error adding stock: ' + err.message);
+    }
   };
 
   const handleIssue = (item) => {
@@ -104,6 +111,7 @@ const Tan = () => { // Capitalized component name (Standard Practice)
             </select>
           </div>
           <input name="yards" type="number" placeholder="Enter Total Yards" required className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm focus:border-[#22c55e]/50" />
+          <input name="weight" type="number" step="0.01" placeholder="Weight (KG)" className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm focus:border-[#22c55e]/50" />
           <button type="submit" className="w-full bg-[#22c55e] text-black font-black py-3 rounded-xl hover:bg-[#1db954] transition-all flex items-center justify-center gap-2 text-sm">
             <PlusCircle size={18} /> ADD TO STOCK
           </button>
@@ -126,13 +134,14 @@ const Tan = () => { // Capitalized component name (Standard Practice)
               <th className="p-4">Width</th>
               <th className="p-4">Micron</th>
               <th className="p-4">Yards</th>
+              <th className="p-4">KG</th>
               <th className="p-4 text-center">Issue Yards</th>
               <th className="p-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="p-16 text-center text-gray-600 font-bold">Inventory Empty or No Matches.</td></tr>
+              <tr><td colSpan={7} className="p-16 text-center text-gray-600 font-bold">Inventory Empty or No Matches.</td></tr>
             ) : filtered.map(item => {
               const isLow = Number(item.yards) < LOW;
               const isEditing = editingId === item._id;
@@ -159,6 +168,7 @@ const Tan = () => { // Capitalized component name (Standard Practice)
                       </span>
                     )}
                   </td>
+                  <td className="p-4 text-sm font-bold text-gray-400">{Number(item.weight || 0).toFixed(2)} kg</td>
                   <td className="p-4">
                     <div className="flex items-center justify-center gap-2">
                        <input type="number" value={issueQty[item._id] || ''} onChange={e => setIssueQty(p => ({ ...p, [item._id]: e.target.value }))} className="bg-black/40 p-2 rounded-lg border border-[#22c55e]/20 w-20 text-center outline-none text-sm font-bold focus:border-red-500/50" placeholder="0" />
