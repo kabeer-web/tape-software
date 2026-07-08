@@ -160,8 +160,14 @@ const MasterSearch = () => {
       const cat = i.category || i.type;
       if (!JAMBO_CATEGORIES.includes(cat)) return false;
       const matchesCat = jamboCategoryFilter === 'All' || cat === jamboCategoryFilter;
-      const matchesSearch = rollMatches(i.roll_no || i.rollNo, searchTerm);
-      return matchesCat && matchesSearch;
+      if (!matchesCat) return false;
+      if (!searchTerm.trim()) return true;
+      // Search matches on roll number OR category/micron/width/color —
+      // previously this only checked roll number, so typing anything else
+      // (a micron value, a color, the category name) always came up empty.
+      const rollNoMatch = rollMatches(i.roll_no || i.rollNo, searchTerm);
+      const textMatch = tokenMatch(`${cat} ${i.micron || ''} ${i.width || ''} ${i.color || ''}`, searchTerm);
+      return rollNoMatch || textMatch;
     });
   }, [inventory, jamboCategoryFilter, searchTerm]);
 
@@ -364,7 +370,7 @@ const MasterSearch = () => {
                 <input
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder={`Filter ${activeTab} by ${activeTab === 'Jambo' ? 'roll #' : activeTab === 'Core' ? 'brand / side / ply' : 'brand / type / size'}...`}
+                    placeholder={`Filter ${activeTab} by ${activeTab === 'Jambo' ? 'roll #, micron, width or color' : activeTab === 'Core' ? 'brand / side / ply' : 'brand / type / size'}...`}
                     className="w-full pl-16 pr-6 py-5 bg-black/40 rounded-[2rem] border border-white/5 focus:border-[#10b981]/50 outline-none transition-all text-white font-bold placeholder:text-slate-600"
                 />
             </div>
