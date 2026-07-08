@@ -1,0 +1,587 @@
+gemeni ne pora code kharab kar dya hai meri jam baray merhbani ye sab theak kar k de bill add delelte save minus sab production mein roll core minus ka feature jambo serach by roll no auto fetch supabase auto roll no generate core minus ka system chye sary flon ko dekh sari filon ka detail fix code 
+import { createContext, useState, useEffect, useCallback } from 'react';
+import { getInventory, addInventory, updateInventory, deleteInventory } from '../../api';
+
+export const StockContext = createContext();
+
+const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam'];
+
+export const StockProvider = ({ children }) => {
+  const [inventory, setInventory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const refreshInventory = useCallback(async () => {
+    try {
+      const data = await getInventory();
+      setInventory(data);
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { refreshInventory(); }, [refreshInventory]);
+
+  // Logic: Generate Next Roll Number
+  const generateNextRollNo = () => {
+    const jambos = inventory.filter(i => JAMBO_CATS.includes(i.category));
+    if (jambos.length === 0) return "001";
+    const rollNumbers = jambos.map(i => parseInt(i.rollNo || i.roll_no || 0)).filter(n => !isNaN(n));
+    const max = Math.max(...rollNumbers, 0);
+    return String(max + 1).padStart(3, '0');
+  };
+
+  const addRoll = async (item) => {
+    let finalItem = { ...item };
+    
+    // Auto Generate Roll No if it's a Jambo
+    if (JAMBO_CATS.includes(item.category)) {
+      finalItem.rollNo = generateNextRollNo();
+    }
+
+    try {
+      const saved = await addInventory(finalItem);
+      setInventory(prev => [saved, ...prev]);
+      return saved;
+    } catch (err) {
+      console.error("Add item error:", err);
+      throw err;
+    }
+  };
+
+  const adjustStock = async (originalItem, field, delta) => {
+    if (!originalItem) return;
+    const existing = inventory.find(i => i._id === originalItem._id);
+    const currentValue = existing ? Number(existing[field] || 0) : 0;
+    const newValue = Number((currentValue + delta).toFixed(2));
+
+    try {
+      if (newValue <= 0) {
+        if (existing) {
+          await deleteInventory(originalItem._id);
+          setInventory(prev => prev.filter(i => i._id !== originalItem._id));
+        }
+      } else {
+        if (!existing) {
+          const { _id, id, created_at, ...rest } = originalItem;
+          const restoredItem = { ...rest, [field]: newValue };
+          const saved = await addInventory(restoredItem);
+          setInventory(prev => [saved, ...prev]);
+        } else {
+          const updated = await updateInventory(originalItem._id, { [field]: newValue });
+          setInventory(prev => prev.map(i => i._id === originalItem._id ? { ...i, ...updated } : i));
+        }
+      }
+    } catch (err) {
+      console.error("Stock adjustment failed:", err);
+      throw err;
+    }
+  };
+
+  const removeItem = async (id) => {
+    await deleteInventory(id);
+    setInventory(prev => prev.filter(i => i._id !== id));
+  };
+
+  return (
+    <StockContext.Provider value={{
+      inventory, loading, adjustStock, addRoll, removeItem, refreshInventory, setInventory
+    }}>
+      {children}
+    </StockContext.Provider>
+  );
+};
+
+
+
+import { useState, useContext, useEffect, useMemo } from 'react';
+import { StockContext } from '../inventory/StockContext';
+import { addProduction, getProductions, deleteProduction, updateProduction } from '../../api';
+import { Plus, Trash2, Factory, Pencil, Check, X, Search, AlertTriangle } from 'lucide-react';
+
+const CORE_BRANDS = ['Bell', 'Race', 'Tesco', 'Jhonson'];
+const PLY_OPTIONS  = ['5', '6', '8', '10'];
+const SIDE_MAP = { 'D/S': 'Double', 'S/S': 'Single' };
+
+const emptyForm = {
+  date: new Date().toLocaleDateString('en-GB'),
+  coreSide: '',
+  coreBrand: '',
+  corePly: '',
+  coreQty: '',
+  yardsPerCore: '',
+};
+
+const Production = () => {
+  const { inventory, adjustStock, refreshInventory } = useContext(StockContext);
+  const [form, setForm] = useState(emptyForm);
+  const [productions, setProductions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState({ text: '', type: '' });
+  const [tab, setTab] = useState('entry');
+  const [rollInput, setRollInput] = useState('');
+  const [rollFound, setRollFound] = useState(null);
+  const [rollErr, setRollErr] = useState('');
+  const [editId, setEditId] = useState(null);
+  const [editData, setEditData] = useState({});
+
+  useEffect(() => {
+    getProductions().then(d => { setProductions(d); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const showMsg = (text, type = 'success') => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg({ text: '', type: '' }), 5000);
+  };
+
+  const handleRollSearch = () => {
+    setRollErr(''); setRollFound(null);
+    const input = rollInput.trim();
+    if (!input) return setRollErr('Enter Roll #');
+    const normalize = (s) => String(s || '').trim().replace(/^0+/, '').toLowerCase();
+    const found = inventory.find(i => !['Core', 'Carton'].includes(i.category) && normalize(i.rollNo || i.roll_no) === normalize(input));
+    if (!found) setRollErr(`Roll #${input} not found`);
+    else setRollFound(found);
+  };
+
+  const coreItem = useMemo(() => {
+    if (!form.coreBrand || !form.coreSide || !form.corePly) return null;
+    const dbSide = SIDE_MAP[form.coreSide];
+    return inventory.find(i => i.category === 'Core' && i.brand === form.coreBrand && (i.side === dbSide || i.side === form.coreSide) && String(i.ply) === String(form.corePly));
+  }, [inventory, form.coreBrand, form.coreSide, form.corePly]);
+
+  const coreQty = parseFloat(form.coreQty) || 0;
+  const yardsPerCore = parseFloat(form.yardsPerCore) || 0;
+  const totalYards = parseFloat((coreQty * yardsPerCore).toFixed(2));
+  const availYards = rollFound ? Number(rollFound.yards) : 0;
+  const yardsTooMany = rollFound && totalYards > availYards;
+  const isReady = rollFound && !yardsTooMany && coreItem && coreQty > 0 && yardsPerCore > 0;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!isReady) return;
+    setSaving(true);
+    try {
+      await adjustStock(rollFound, 'yards', -totalYards);
+      await adjustStock(coreItem, 'qty', -coreQty);
+      const prodRecord = {
+        date: form.date,
+        roll_no: String(rollFound.rollNo || rollFound.roll_no),
+        jambo_type: rollFound.category || rollFound.type,
+        micron: String(rollFound.micron || ''),
+        width: String(rollFound.width || ''),
+        core_side: form.coreSide, core_brand: form.coreBrand, core_ply: form.corePly,
+        core_qty_used: coreQty, yards_per_core: yardsPerCore, yards_used: totalYards,
+        roll_snapshot: rollFound, core_snapshot: coreItem
+      };
+      const saved = await addProduction(prodRecord);
+      setProductions(prev => [saved, ...prev]);
+      showMsg('Production success!');
+      setForm(emptyForm); setRollInput(''); setRollFound(null); setTab('history');
+    } catch (err) {
+      showMsg('Error: ' + err.message, 'error');
+      refreshInventory();
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (p) => {
+    if (!window.confirm('Restore stock and delete?')) return;
+    try {
+      await adjustStock(p.roll_snapshot, 'yards', p.yards_used);
+      await adjustStock(p.core_snapshot, 'qty', p.core_qty_used);
+      await deleteProduction(p._id);
+      setProductions(prev => prev.filter(x => x._id !== p._id));
+      showMsg('Restored and Deleted.');
+    } catch (err) { showMsg('Delete error: ' + err.message, 'error'); }
+  };
+
+  const saveEdit = async (id) => {
+    const old = productions.find(x => x._id === id);
+    const newQty = parseFloat(editData.core_qty_used) || 0;
+    const newYds = parseFloat(editData.yards_per_core) || 0;
+    const newTotal = parseFloat((newQty * newYds).toFixed(2));
+    try {
+      await adjustStock(old.roll_snapshot, 'yards', old.yards_used);
+      await adjustStock(old.core_snapshot, 'qty', old.core_qty_used);
+      await adjustStock(old.roll_snapshot, 'yards', -newTotal);
+      await adjustStock(old.core_snapshot, 'qty', -newQty);
+      const updated = await updateProduction(id, { ...editData, yards_used: newTotal });
+      setProductions(prev => prev.map(x => x._id === id ? updated : x));
+      setEditId(null); showMsg('Update successful');
+    } catch (err) { showMsg('Update error: ' + err.message, 'error'); refreshInventory(); }
+  };
+
+  const inp = 'w-full bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm transition';
+  const editInp = 'bg-black/30 p-1.5 rounded-lg border border-[#22c55e]/20 outline-none text-xs';
+
+  return (
+    <div className="text-white min-h-screen">
+      <div className="flex items-center gap-3 mb-6"><Factory className="text-[#22c55e]" size={24}/><h1 className="text-2xl font-black">PRODUCTION</h1></div>
+      <div className="flex gap-1 mb-6 bg-white/[0.03] p-1 rounded-2xl border border-white/10">
+        <button onClick={() => setTab('entry')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition ${tab === 'entry' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>New Entry</button>
+        <button onClick={() => setTab('history')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition ${tab === 'history' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>History</button>
+      </div>
+      {msg.text && <div className={`mb-5 p-3 rounded-xl text-sm font-bold border ${msg.type === 'success' ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]' : 'bg-red-500/10 border-red-500/40 text-red-400'}`}>{msg.text}</div>}
+      {tab === 'entry' && (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20">
+            <div className="flex gap-2 mb-4">
+              <input value={rollInput} onChange={e => { setRollInput(e.target.value); setRollErr(''); }} placeholder="Roll #" className={`flex-1 bg-black/30 p-2.5 rounded-xl border outline-none text-sm ${rollErr ? 'border-red-500/50' : 'border-[#22c55e]/20'}`}/>
+              <button type="button" onClick={handleRollSearch} className="bg-[#22c55e] text-black font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm"><Search size={15}/> Search</button>
+            </div>
+            {rollFound && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {[ { label: 'Roll #', val: rollFound.rollNo || rollFound.roll_no }, { label: 'Type', val: rollFound.category || rollFound.type }, { label: 'Micron', val: rollFound.micron ? `${rollFound.micron}μ` : '—' }, { label: 'Width', val: rollFound.width ? `${rollFound.width}mm` : '—' }, { label: 'Stock', val: rollFound.yards, big: true } ].map(({ label, val, big }) => (
+                  <div key={label} className="bg-black/20 p-2 rounded-lg border border-white/5"><p className="text-[9px] text-gray-500 uppercase">{label}</p><p className={`font-black ${big ? 'text-[#22c55e] text-lg' : 'text-white text-sm'}`}>{val}</p></div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20 grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div><label className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 block">Side</label><select value={form.coreSide} onChange={e => setForm({...form, coreSide: e.target.value})} className={inp}><option value="">Select Side</option><option value="D/S">D/S</option><option value="S/S">S/S</option></select></div>
+            <div><label className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 block">Brand</label><select value={form.coreBrand} onChange={e => setForm({...form, coreBrand: e.target.value})} className={inp}><option value="">Select Brand</option>{CORE_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+            <div><label className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 block">Ply</label><select value={form.corePly} onChange={e => setForm({...form, corePly: e.target.value})} className={inp}><option value="">Select Ply</option>{PLY_OPTIONS.map(p => <option key={p} value={p}>{p} Ply</option>)}</select></div>
+            <div><label className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 block">Qty</label><input type="number" value={form.coreQty} onChange={e => setForm({...form, coreQty: e.target.value})} className={inp} placeholder="0"/></div>
+            <div><label className="text-[10px] text-gray-500 uppercase font-bold mb-1.5 block">Yards/Core</label><input type="number" step="0.1" value={form.yardsPerCore} onChange={e => setForm({...form, yardsPerCore: e.target.value})} className={inp} placeholder="0"/></div>
+            <div className="flex items-end"><button type="submit" disabled={!isReady || saving} className="w-full bg-[#22c55e] text-black font-black py-2.5 rounded-xl disabled:opacity-30">{saving ? 'SAVING...' : 'SAVE PRODUCTION'}</button></div>
+          </div>
+        </form>
+      )}
+      {tab === 'history' && (
+        <div className="bg-white/[0.03] rounded-2xl border border-white/10 overflow-x-auto">
+          <table className="w-full text-left min-w-[800px]">
+            <thead className="bg-black/40 text-[10px] text-gray-500 uppercase"><tr><th className="p-4">Date</th><th className="p-4">Roll</th><th className="p-4">Specs</th><th className="p-4 text-center">Qty</th><th className="p-4 text-center">Yards</th><th className="p-4 text-right">Actions</th></tr></thead>
+            <tbody>
+              {productions.map(p => {
+                const isEd = editId === p._id;
+                return (
+                  <tr key={p._id} className="border-t border-white/5 text-sm"><td className="p-4">{p.date}</td><td className="p-4 font-bold text-[#22c55e]">#{p.roll_no}</td><td className="p-4">{p.core_brand} {p.core_side} {p.core_ply}p</td><td className="p-4 text-center">{isEd ? <input value={editData.core_qty_used} onChange={e=>setEditData({...editData, core_qty_used: e.target.value})} className={editInp}/> : p.core_qty_used}</td><td className="p-4 text-center font-bold text-[#22c55e]">{isEd ? (parseFloat(editData.core_qty_used||0) * parseFloat(editData.yards_per_core||0)).toFixed(2) : p.yards_used}</td><td className="p-4 text-right flex justify-end gap-2">{isEd ? (<><Check className="cursor-pointer text-[#22c55e]" onClick={()=>saveEdit(p._id)}/><X className="cursor-pointer" onClick={()=>setEditId(null)}/></>) : (<><Pencil className="cursor-pointer text-gray-400" size={15} onClick={()=>{setEditId(p._id); setEditData(p);}}/><Trash2 className="cursor-pointer text-gray-400" size={15} onClick={()=>handleDelete(p)}/></>)}</td></tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Production;
+
+
+import { supabase } from './supabase';
+
+// ─── INVENTORY ───────────────────────────────────────────
+export const getInventory = async () => {
+  const { data, error } = await supabase
+    .from('inventory')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data.map(i => ({ 
+    ...i, 
+    _id: i.id, 
+    rollNo: i.roll_no, 
+    cartonType: i.carton_type 
+  }));
+};
+
+export const addInventory = async (item) => {
+  const payload = {
+    category:    item.category,
+    type:        item.type || item.category,
+    date:        item.date,
+    roll_no:     item.rollNo || item.roll_no || null,
+    yards:       item.yards ? Number(item.yards) : 0,
+    micron:      item.micron || null,
+    width:       item.width || null,
+    color:       item.color || null,
+    brand:       item.brand || null,
+    side:        item.side || null,
+    ply:         item.ply || null,
+    qty:         item.qty ? Number(item.qty) : 0,
+    carton_type: item.cartonType || item.type || item.category,
+    size:        item.size || null,
+  };
+
+  const { data, error } = await supabase
+    .from('inventory')
+    .insert([payload])
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id, rollNo: data.roll_no };
+};
+
+export const updateInventory = async (id, item) => {
+  const updateData = {};
+  if (item.yards !== undefined)  updateData.yards = Number(item.yards);
+  if (item.qty !== undefined)    updateData.qty   = Number(item.qty);
+  if (item.color !== undefined)  updateData.color = item.color;
+  if (item.micron !== undefined) updateData.micron = item.micron;
+  if (item.width !== undefined)  updateData.width = item.width;
+
+  const { data, error } = await supabase
+    .from('inventory')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id, rollNo: data.roll_no };
+};
+
+export const deleteInventory = async (id) => {
+  const { error } = await supabase.from('inventory').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+// ─── BILLS ───────────────────────────────────────────────
+export const getBills = async () => {
+  const { data, error } = await supabase.from('bills').select('*').order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data.map(b => ({ ...b, _id: b.id, billNo: b.bill_no, partyName: b.party_name, grandTotal: b.grand_total }));
+};
+
+export const addBill = async (bill) => {
+  const { data, error } = await supabase.from('bills').insert([{
+    bill_type: bill.billType, bill_no: bill.billNo, party_name: bill.partyName,
+    date: bill.date, grand_total: bill.grandTotal, items: bill.items,
+  }]).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id, billNo: data.bill_no };
+};
+
+export const updateBill = async (id, bill) => {
+  const { data, error } = await supabase.from('bills').update({
+    bill_no: bill.billNo, party_name: bill.partyName, date: bill.date,
+    grand_total: bill.grandTotal, items: bill.items,
+  }).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const deleteBill = async (id) => {
+  const { error } = await supabase.from('bills').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+// ─── PARTIES ─────────────────────────────────────────────
+export const getParties = async () => {
+  const { data, error } = await supabase.from('parties').select('*').order('name', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data.map(p => ({ ...p, _id: p.id }));
+};
+
+export const addParty = async (party) => {
+  const { data, error } = await supabase.from('parties').insert([party]).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const updateParty = async (id, party) => {
+  const { data, error } = await supabase.from('parties').update(party).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const deleteParty = async (id) => {
+  const { error } = await supabase.from('parties').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+// ─── PRODUCTIONS ──────────────────────────────────────────
+export const getProductions = async () => {
+  const { data, error } = await supabase.from('productions').select('*').order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data.map(p => ({ ...p, _id: p.id }));
+};
+
+export const addProduction = async (prod) => {
+  const { data, error } = await supabase.from('productions').insert([prod]).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const updateProduction = async (id, prod) => {
+  const { data, error } = await supabase.from('productions').update(prod).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return { ...data, _id: data.id };
+};
+
+export const deleteProduction = async (id) => {
+  const { error } = await supabase.from('productions').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = 'https://gxxndoypcrgfqkqwesni.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_lPUaMlpgGBNhTQ8rEfPVKg_I3xn2x5A';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+
+import { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { StockProvider } from './Components/inventory/StockContext';
+import { AccountsProvider } from './Components/inventory/ACCOUNTS/AccountsContext';
+import { AuthProvider, useAuth } from './Components/AuthContext';
+
+import Sidebar from './Components/Sidebar';
+import Dashboard from './Components/Dashboard';
+import MasterSearch from './Components/MasterSearch';
+import Login from './Components/Login';
+import Production from './Components/inventory/Production';
+// Jambo
+import JamboStock from './Components/inventory/JamboStock';
+import Clear from './Components/inventory/JAMBOFILES/clear';
+import Tan from './Components/inventory/JAMBOFILES/tan';
+import SuperYellow from './Components/inventory/JAMBOFILES/superyellow';
+import SuperClear from './Components/inventory/JAMBOFILES/superclear';
+import Color from './Components/inventory/JAMBOFILES/color';
+import Cloth from './Components/inventory/JAMBOFILES/cloth';
+import Masking from './Components/inventory/JAMBOFILES/masking';
+import Tissue from './Components/inventory/JAMBOFILES/tissue';
+import Foam from './Components/inventory/JAMBOFILES/foam';
+
+// Carton
+import CartonStock from './Components/inventory/CartonStock';
+import BellCarton from './Components/inventory/CARTON BRANDS/bell';
+import RaceCarton from './Components/inventory/CARTON BRANDS/race';
+import TescoCarton from './Components/inventory/CARTON BRANDS/tesco';
+import JhonsonCarton from './Components/inventory/CARTON BRANDS/jhonson';
+
+// Core
+import Bell from './Components/inventory/CORE BRANDS/bell';
+import Race from './Components/inventory/CORE BRANDS/race';
+import Tesco from './Components/inventory/CORE BRANDS/tesco';
+import Jhonson from './Components/inventory/CORE BRANDS/jhonson';
+
+// Billing & Accounts
+import SaleInvoice from './Components/inventory/BILL/saleinvoice';
+import PurchaseInvoice from './Components/inventory/BILL/purchaseinvoice';
+import SavedBills from './Components/inventory/BILL/SavedBills';
+import Ledger from './Components/inventory/ACCOUNTS/Ledger';
+
+// Protected Route
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return (
+    <div className="min-h-screen bg-[#070707] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-10 h-10 border-2 border-[#22c55e]/30 border-t-[#22c55e] rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-[#22c55e] font-bold text-sm">Loading...</p>
+      </div>
+    </div>
+  );
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+};
+
+// Main Layout
+const AppLayout = () => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  return (
+    <div className="flex bg-[#070707] min-h-screen relative">
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/60 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+      <div className={`fixed top-0 left-0 h-full z-30 transition-transform duration-300 lg:relative lg:translate-x-0 lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <Sidebar onClose={() => setSidebarOpen(false)} />
+      </div>
+      <main className="flex-1 min-h-screen text-white flex flex-col">
+        <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-[#0c0c0c] border-b border-[#22c55e]/10 sticky top-0 z-10">
+          <button onClick={() => setSidebarOpen(true)} className="text-[#22c55e] p-2 rounded-xl hover:bg-[#22c55e]/10 transition">
+            <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+          <h1 className="text-[#22c55e] font-black text-xl italic tracking-tighter">BEER<span className="text-white">FLOW</span></h1>
+          <div className="w-9" />
+        </div>
+        <div className="flex-1 p-4 md:p-6 lg:p-8">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/search" element={<MasterSearch />} />
+            <Route path="/inventory/jambo" element={<JamboStock />} />
+            <Route path="/inventory/jambo/clear" element={<Clear />} />
+            <Route path="/inventory/jambo/tan" element={<Tan />} />
+            <Route path="/inventory/jambo/super-yellow" element={<SuperYellow />} />
+            <Route path="/inventory/jambo/super-clear" element={<SuperClear />} />
+            <Route path="/inventory/jambo/color-tape" element={<Color />} />
+            <Route path="/inventory/jambo/cloth-tape" element={<Cloth />} />
+            <Route path="/inventory/jambo/masking" element={<Masking />} />
+            <Route path="/inventory/jambo/tissue-tape" element={<Tissue />} />
+            <Route path="/inventory/jambo/foam-tape" element={<Foam />} />
+            <Route path="/inventory/carton" element={<CartonStock />} />
+            <Route path="/inventory/carton/bell" element={<BellCarton />} />
+            <Route path="/inventory/carton/race" element={<RaceCarton />} />
+            <Route path="/inventory/carton/tesco" element={<TescoCarton />} />
+            <Route path="/inventory/carton/jhonson" element={<JhonsonCarton />} />
+            <Route path="/inventory/core/bell" element={<Bell />} />
+            <Route path="/inventory/core/race" element={<Race />} />
+            <Route path="/inventory/core/tesco" element={<Tesco />} />
+            <Route path="/inventory/core/jhonson" element={<Jhonson />} />
+            <Route path="/billing/sale" element={<SaleInvoice />} />
+            <Route path="/billing/purchase" element={<PurchaseInvoice />} />
+            <Route path="/billing/saved" element={<SavedBills />} />
+            <Route path="/accounts/ledger" element={<Ledger />} />
+            <Route path="/accounts/bills" element={<SavedBills />} />
+            <Route path="/production" element={<Production />} />
+            <Route path="*" element={
+              <div className="flex items-center justify-center h-[60vh]">
+                <div className="text-center">
+                  <p className="text-6xl font-black text-[#22c55e]/20 mb-4">404</p>
+                  <p className="text-gray-400">Page nahi mila</p>
+                </div>
+              </div>
+            } />
+          </Routes>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+function App() {
+  return (
+    <AuthProvider>
+      <StockProvider>
+        <AccountsProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={<PublicRoute />} />
+              <Route path="/*" element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </Router>
+        </AccountsProvider>
+      </StockProvider>
+    </AuthProvider>
+  );
+}
+
+// Agar already logged in ho to /login pe nahi jaega
+const PublicRoute = () => {
+  const { user, loading } = useAuth();
+  if (loading) return (
+    <div className="min-h-screen bg-[#070707] flex items-center justify-center">
+      <div className="w-10 h-10 border-2 border-[#22c55e]/30 border-t-[#22c55e] rounded-full animate-spin" />
+    </div>
+  );
+  if (user) return <Navigate to="/" replace />;
+  return <Login />;
+};
+
+export default App;
