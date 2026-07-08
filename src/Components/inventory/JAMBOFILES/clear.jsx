@@ -1,11 +1,11 @@
 import { useState, useContext } from 'react';
-import { StockContext } from '../StockContext';
+import { StockContext, displayRoll, rollMatches } from '../StockContext';
 import { Search, PlusCircle, MinusCircle, Pencil, Trash2, Check, X, AlertTriangle } from 'lucide-react';
 
 const CAT   = 'Clear';
 const TITLE = 'CLEAR TAPE';
 const LOW   = 50;
-const MICRONS = [37,39,40,42,43,44,45,48];
+const MICRONS = [37,39,40,42,48];
 
 export default function Clear() {
   const { inventory, addRoll, removeItem, issueYards, editItemYards, loading } = useContext(StockContext);
@@ -16,7 +16,7 @@ export default function Clear() {
 
   const filtered = inventory.filter(i =>
     (i.category === CAT || i.type === CAT) &&
-    String(i.rollNo || i.roll_no || '').includes(search)
+    rollMatches(i.rollNo || i.roll_no, search)
   );
 
   const total1280 = filtered.filter(i => String(i.width) === '1280').reduce((s,i) => s + (Number(i.yards)||0), 0);
@@ -28,8 +28,14 @@ export default function Clear() {
     const f = new FormData(e.target);
     const yards = parseFloat(f.get('yards'));
     if (!yards || yards <= 0) return;
-    await addRoll({ category: CAT, micron: f.get('micron'), width: f.get('width'), yards });
-    e.target.reset();
+    const weight = parseFloat(f.get('weight')) || 0;
+    try {
+      await addRoll({ category: CAT, micron: f.get('micron'), width: f.get('width'), yards, weight });
+      e.target.reset();
+    } catch (err) {
+      console.error(err);
+      alert('Error adding stock: ' + err.message);
+    }
   };
 
   const handleIssue = (item) => {
@@ -92,6 +98,7 @@ export default function Clear() {
             </select>
           </div>
           <input name="yards" type="number" placeholder="Yards" required className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm" />
+          <input name="weight" type="number" step="0.01" placeholder="Weight (KG)" className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm" />
           <button className="w-full bg-[#22c55e] text-black font-bold py-3 rounded-xl hover:bg-[#1db954] flex items-center justify-center gap-2 text-sm transition">
             <PlusCircle size={16}/> ADD TO STOCK
           </button>
@@ -115,19 +122,20 @@ export default function Clear() {
               <th className="p-3">Width</th>
               <th className="p-3">Micron</th>
               <th className="p-3">Yards</th>
+              <th className="p-3">KG</th>
               <th className="p-3 text-center">Issue</th>
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="p-12 text-center text-gray-600">No rolls found.</td></tr>
+              <tr><td colSpan={7} className="p-12 text-center text-gray-600">No rolls found.</td></tr>
             ) : filtered.map(item => {
               const isLow  = Number(item.yards) < LOW;
               const isEdit = editingId === item._id;
               return (
                 <tr key={item._id} className={`border-t border-white/5 hover:bg-white/[0.02] transition ${isLow ? 'bg-yellow-500/5' : ''}`}>
-                  <td className="p-3 font-black text-[#22c55e]">#{item.rollNo || item.roll_no}</td>
+                  <td className="p-3 font-black text-[#22c55e]">#{displayRoll(item.rollNo || item.roll_no)}</td>
                   <td className="p-3">
                     <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${String(item.width) === '1600' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/20'}`}>
                       {item.width}mm
@@ -148,6 +156,7 @@ export default function Clear() {
                       </span>
                     )}
                   </td>
+                  <td className="p-3 text-gray-400 text-sm">{Number(item.weight || 0).toFixed(2)} kg</td>
                   <td className="p-3">
                     <div className="flex items-center justify-center gap-2">
                       <input type="number" value={issueQty[item._id] || ''} onChange={e => setIssueQty(p => ({...p,[item._id]:e.target.value}))} className="bg-black/40 p-1.5 rounded-lg border border-[#22c55e]/20 w-16 text-center outline-none text-sm" placeholder="0"/>
