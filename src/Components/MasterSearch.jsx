@@ -302,7 +302,7 @@ const MasterSearch = () => {
                 <div className="pt-3">
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wide mb-2">Items</p>
                   {selectedRecord.raw.items.map((it, idx) => (
-                    <div key={idx} className="bg-white/[0.03] rounded-xl p-3 mb-1.5 text-xs text-gray-300">
+                    <div key={it.id || `${it.specsLabel || ''}-${idx}`} className="bg-white/[0.03] rounded-xl p-3 mb-1.5 text-xs text-gray-300">
                       {it.specsLabel || `${it.brand || ''} ${it.colour || ''} ${it.mainCategory || ''}`} — Qty: {it.qty || it.totalQty || '—'}
                     </div>
                   ))}
@@ -357,13 +357,14 @@ const MasterSearch = () => {
 
       {/* Unified Search & Category Bar */}
       <div className="bg-white/[0.03] border border-white/5 rounded-[3rem] p-5 mb-10 backdrop-blur-sm">
+        <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-3 ml-2">Filter within {activeTab} (separate from Master Search above)</p>
         <div className="flex flex-col lg:flex-row gap-5">
             <div className="relative flex-1">
                 <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-[#10b981]/50" size={22} />
                 <input
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder={`Global search ${activeTab} database...`}
+                    placeholder={`Filter ${activeTab} by ${activeTab === 'Jambo' ? 'roll #' : activeTab === 'Core' ? 'brand / side / ply' : 'brand / type / size'}...`}
                     className="w-full pl-16 pr-6 py-5 bg-black/40 rounded-[2rem] border border-white/5 focus:border-[#10b981]/50 outline-none transition-all text-white font-bold placeholder:text-slate-600"
                 />
             </div>
@@ -423,10 +424,11 @@ const MasterSearch = () => {
         })}
 
         {/* CORE / CARTON CARDS */}
-        {(activeTab === 'Core' || activeTab === 'Carton') && (activeTab === 'Core' ? filteredCore : filteredCarton).map((i, idx) => {
+        {(activeTab === 'Core' || activeTab === 'Carton') && (activeTab === 'Core' ? filteredCore : filteredCarton).map((i) => {
              const isLow = i.totalQty < LOW_STOCK_UNITS;
+             const stableKey = activeTab === 'Core' ? `core-${i.brand}-${i.side}-${i.ply}` : `carton-${i.brand}-${i.cType}-${i.size}`;
              return (
-                <div key={idx} className="group bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 hover:bg-white/[0.04] transition-all duration-500 border-b-2 hover:border-[#10b981]/40">
+                <div key={stableKey} className="group bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 hover:bg-white/[0.04] transition-all duration-500 border-b-2 hover:border-[#10b981]/40">
                     <div className="flex justify-between items-center mb-8">
                         <div className="p-4 bg-black/40 rounded-2xl text-[#10b981] border border-white/5 shadow-xl">
                             {activeTab === 'Core' ? <Package size={26} /> : <Archive size={26} />}
