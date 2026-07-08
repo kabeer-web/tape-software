@@ -25,12 +25,14 @@ const Masking = () => {
   const yards = parseFloat(f.get('yards'));
   if (!yards || yards <= 0) return;
   try {
+    const weight = parseFloat(f.get('weight')) || 0;
     await addRoll({
       category: 'Masking',
       type: 'Masking',
       micron: f.get('micron'),
       width: f.get('width'),
-      yards
+      yards,
+      weight
     });
     e.target.reset();
   } catch (err) {
@@ -97,6 +99,7 @@ const Masking = () => {
             </select>
           </div>
           <input name="yards" type="number" placeholder="Yards" required className="w-full bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm" />
+          <input name="weight" type="number" step="0.01" placeholder="Weight (KG)" className="w-full bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm" />
           <button type="submit" className="w-full bg-[#22c55e] text-black font-bold py-2.5 rounded-xl hover:bg-[#1db954] flex items-center justify-center gap-2 text-sm transition">
             <PlusCircle size={16} /> ADD TO STOCK
           </button>
@@ -113,11 +116,11 @@ const Masking = () => {
       <div className="bg-white/[0.03] rounded-2xl border border-[#22c55e]/10 overflow-x-auto">
         <table className="w-full text-left min-w-[580px]">
           <thead className="bg-black/30 text-gray-500 text-xs uppercase">
-            <tr><th className="p-3">Roll</th><th className="p-3">Specs</th><th className="p-3">Yards</th><th className="p-3">Issue</th><th className="p-3 text-right">Actions</th></tr>
+            <tr><th className="p-3">Roll</th><th className="p-3">Specs</th><th className="p-3">Yards</th><th className="p-3">KG</th><th className="p-3">Issue</th><th className="p-3 text-right">Actions</th></tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={5} className="p-10 text-center text-gray-500">Koi roll nahi mila.</td></tr>
+              <tr><td colSpan={6} className="p-10 text-center text-gray-500">Koi roll nahi mila.</td></tr>
             ) : filtered.map(item => {
               const isLow = Number(item.yards) < LOW;
               const isEditing = editingId === item._id;
@@ -136,6 +139,7 @@ const Masking = () => {
                       <span className={`font-bold text-sm ${isLow ? 'text-yellow-500' : 'text-[#22c55e]'}`}>{item.yards}{isLow && <span className="text-[10px] bg-yellow-500/20 px-1.5 py-0.5 rounded-full ml-1">LOW</span>}</span>
                     )}
                   </td>
+                  <td className="p-3 text-sm text-gray-400">{Number(item.weight || 0).toFixed(2)} kg</td>
                   <td className="p-3"><input type="number" value={issueQty[item._id] || ''} onChange={e => setIssueQty(p => ({ ...p, [item._id]: e.target.value }))} className="bg-black/30 p-1.5 rounded-lg border border-[#22c55e]/20 w-16 text-center outline-none text-sm" placeholder="0" /></td>
                   <td className="p-3">
                     <div className="flex items-center justify-end gap-2">
