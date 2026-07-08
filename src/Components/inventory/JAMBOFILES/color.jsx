@@ -27,8 +27,14 @@ export default function Color() {
     const f = new FormData(e.target);
     const yards = parseFloat(f.get('yards'));
     if (!yards||yards<=0) return;
-    await addRoll({ category:CAT, color:f.get('color'), micron:f.get('micron'), width:'1280', yards });
-    e.target.reset();
+    const weight = parseFloat(f.get('weight')) || 0;
+    try {
+      await addRoll({ category:CAT, color:f.get('color'), micron:f.get('micron'), width:'1280', yards, weight });
+      e.target.reset();
+    } catch (err) {
+      console.error(err);
+      alert('Error adding stock: ' + err.message);
+    }
   };
 
   const handleIssue = (item) => {
@@ -83,6 +89,7 @@ export default function Color() {
             </select>
           </div>
           <input name="yards" type="number" placeholder="Yards" required className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/>
+          <input name="weight" type="number" step="0.01" placeholder="Weight (KG)" className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm"/>
           <button className="w-full bg-[#22c55e] text-black font-bold py-3 rounded-xl hover:bg-[#1db954] flex items-center justify-center gap-2 text-sm transition">
             <PlusCircle size={16}/> ADD TO STOCK
           </button>
@@ -99,10 +106,10 @@ export default function Color() {
       <div className="bg-white/[0.03] rounded-2xl border border-[#22c55e]/10 overflow-x-auto">
         <table className="w-full text-left min-w-[660px]">
           <thead className="bg-black/40 text-gray-500 text-[10px] uppercase font-bold">
-            <tr><th className="p-3">Roll #</th><th className="p-3">Color</th><th className="p-3">Micron</th><th className="p-3">Yards</th><th className="p-3 text-center">Issue</th><th className="p-3 text-right">Actions</th></tr>
+            <tr><th className="p-3">Roll #</th><th className="p-3">Color</th><th className="p-3">Micron</th><th className="p-3">Yards</th><th className="p-3">KG</th><th className="p-3 text-center">Issue</th><th className="p-3 text-right">Actions</th></tr>
           </thead>
           <tbody>
-            {filtered.length===0 ? <tr><td colSpan={6} className="p-12 text-center text-gray-600">No rolls found.</td></tr>
+            {filtered.length===0 ? <tr><td colSpan={7} className="p-12 text-center text-gray-600">No rolls found.</td></tr>
             : filtered.map(item=>{
               const isLow=Number(item.yards)<LOW;
               const isEdit=editingId===item._id;
@@ -124,6 +131,7 @@ export default function Color() {
                       </span>
                     )}
                   </td>
+                  <td className="p-3 text-gray-400 text-sm">{Number(item.weight || 0).toFixed(2)} kg</td>
                   <td className="p-3">
                     <div className="flex items-center justify-center gap-2">
                       <input type="number" value={issueQty[item._id]||''} onChange={e=>setIssueQty(p=>({...p,[item._id]:e.target.value}))} className="bg-black/40 p-1.5 rounded-lg border border-[#22c55e]/20 w-16 text-center outline-none text-sm" placeholder="0"/>
