@@ -29,8 +29,13 @@ export default function Lemon() {
     const yards = parseFloat(f.get('yards'));
     if (!yards || yards <= 0) return;
     const weight = parseFloat(f.get('weight')) || 0;
-    await addRoll({ category: CAT, micron: f.get('micron'), width: f.get('width'), yards, weight });
-    e.target.reset();
+    try {
+      await addRoll({ category: CAT, micron: f.get('micron'), width: f.get('width'), yards, weight });
+      e.target.reset();
+    } catch (err) {
+      console.error(err);
+      alert('Error adding stock: ' + err.message);
+    }
   };
 
   const handleIssue = (item) => {
