@@ -1,7 +1,7 @@
 import { useState, useRef, useContext } from 'react';
 import {
   FileText, Plus, Trash2, Printer,
-  Upload, X, Save, AlertCircle, Box
+  Upload, X, Save, AlertCircle, Box, Minus, Pencil, RotateCcw
 } from 'lucide-react';
 
 // ✅ Vercel Build Paths (Fixed)
@@ -53,7 +53,7 @@ const CARTON_BRANDS = ['Bell','Race','Tesco','Jhonson'];
 const CARTON_SIZES  = ['10','10.5','11','12'];
 
 const emptyItem   = { sizeUnit:'mm', sizeMm:'', sizeInch:'', yards:'', colour:'', brand:'', micron:'', totalCarton:'', perCtnQty:'', rate:'' };
-const emptyCarton = { brand:'', type:'Small', size:'10', qty:'' };
+const emptyCartonRow = { brand:'', type:'Small', size:'10', qty:'' };
 
 const SelectOrCustom = ({ value, onChange, options, placeholder }) => {
   const isCustom = value !== '' && !options.includes(value);
@@ -76,14 +76,14 @@ const ErrMsg = ({ msg }) => msg ? <p className="text-red-400 text-[10px] mt-1 fl
 // ── Professional Print Generator ─────────────────────────────────
 export const generateInvoiceHTML = (bill) => {
   const { billNo, partyName, date, items, grandTotal, totalCartonCount, logo } = bill;
-  const logoHtml = logo ? `<img src="${logo}" style="height:60px;object-fit:contain;"/>` : `<div style="font-size:24px;font-weight:900;">HS Packages</div>`;
+  const logoHtml = logo ? `<img src="${logo}" style="height:56px;object-fit:contain;"/>` : `<div class="co-name">HS <span>Packages</span></div>`;
 
   const rowsHtml = (items || []).map((r, i) => {
     const size = r.sizeLabel || [r.sizeMm ? `${r.sizeMm}mm` : '', r.sizeInch ? `${r.sizeInch}` : '', r.yards ? `${r.yards}yds` : ''].filter(Boolean).join(' / ');
     return `
     <tr>
       <td style="text-align:center">${i + 1}</td>
-      <td style="font-weight:600">${size}</td>
+      <td style="font-weight:600;text-align:left;padding-left:12px">${size}</td>
       <td>${r.colour || '—'}</td>
       <td>${r.brand || '—'}</td>
       <td style="text-align:center">${r.micron || '—'}</td>
@@ -98,29 +98,42 @@ export const generateInvoiceHTML = (bill) => {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Invoice #${billNo}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#000;padding:30px 40px;line-height:1.4}
-  .hdr{display:flex;justify-content:space-between;border-bottom:3px solid #000;padding-bottom:15px;margin-bottom:20px}
-  .co-info{font-size:10px;color:#333;font-weight:500}
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#1a1a1a;line-height:1.5;background:#fff}
+  .accent-bar{height:6px;background:linear-gradient(90deg,#059669,#10b981)}
+  .sheet{padding:32px 40px}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:18px;margin-bottom:24px}
+  .co-name{font-size:22px;font-weight:900;letter-spacing:0.5px;color:#111}
+  .co-name span{color:#059669}
+  .co-info{font-size:9.5px;color:#555;font-weight:500;margin-top:8px;line-height:1.6}
   .inv-title{text-align:right}
-  .inv-title h1{font-size:28px;font-weight:900;letter-spacing:4px;margin-bottom:5px}
-  .meta-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:15px;margin-bottom:25px}
-  .meta-item{border:1px solid #ddd;padding:10px;border-radius:5px}
-  .meta-label{font-size:8px;text-transform:uppercase;color:#666;font-weight:bold;margin-bottom:3px}
-  .meta-value{font-size:12px;font-weight:700}
-  table{width:100%;border-collapse:collapse;margin-bottom:25px}
-  thead th{background:#f0f0f0;color:#000;padding:10px 5px;font-size:9px;text-transform:uppercase;border:1.5px solid #000}
-  tbody td{padding:8px 5px;border:1px solid #eee;border-bottom:1px solid #ddd}
-  .footer-area{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
-  .words-box{flex:1;border:1px solid #ddd;padding:12px;border-radius:5px;min-height:60px}
-  .total-card{width:280px;border:3px solid #000;padding:15px;text-align:center;border-radius:8px}
-  .total-val{font-size:26px;font-weight:900}
-  .sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:50px;margin-top:80px}
-  .sig-line{border-top:1.5px solid #000;text-align:center;padding-top:8px;font-weight:bold;font-size:10px;text-transform:uppercase}
-  @media print{@page{margin:10mm;size:A4}}
+  .inv-badge{display:inline-block;background:#111;color:#fff;font-size:20px;font-weight:900;letter-spacing:3px;padding:8px 20px;border-radius:6px;margin-bottom:6px}
+  .copy-label{font-weight:700;font-size:9.5px;color:#666;text-transform:uppercase;letter-spacing:1px}
+  .meta-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;margin-bottom:26px}
+  .meta-item{border:1px solid #e2e2e2;background:#fafafa;padding:11px 13px;border-radius:8px}
+  .meta-label{font-size:8px;text-transform:uppercase;color:#059669;font-weight:800;letter-spacing:0.5px;margin-bottom:4px}
+  .meta-value{font-size:13px;font-weight:800;color:#111}
+  table{width:100%;border-collapse:collapse;margin-bottom:26px;border-radius:8px;overflow:hidden}
+  thead th{background:#111;color:#fff;padding:11px 5px;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;text-align:center}
+  tbody tr:nth-child(even){background:#fafafa}
+  tbody td{padding:9px 5px;border-bottom:1px solid #eee;font-size:10.5px}
+  tbody td:first-child{color:#888}
+  tbody tr:last-child td{border-bottom:2px solid #111}
+  .footer-area{display:flex;justify-content:space-between;gap:20px;align-items:stretch;margin-bottom:50px}
+  .words-box{flex:1;border:1px solid #e2e2e2;background:#fafafa;padding:16px;border-radius:8px}
+  .words-text{font-size:11.5px;font-weight:700;font-style:italic;color:#222;margin-top:4px}
+  .cartons-line{margin-top:14px;font-size:12px;font-weight:800;color:#059669;border-top:1px dashed #ddd;padding-top:10px}
+  .total-card{width:260px;background:#111;color:#fff;padding:20px;text-align:center;border-radius:10px}
+  .total-label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#9ca3af;font-weight:700;margin-bottom:6px}
+  .total-val{font-size:28px;font-weight:900;color:#fff}
+  .sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:50px;margin-top:60px}
+  .sig-line{border-top:1.5px solid #111;text-align:center;padding-top:8px;font-weight:700;font-size:9.5px;text-transform:uppercase;color:#333;letter-spacing:0.5px}
+  @media print{@page{margin:0;size:A4} .sheet{padding:14mm 16mm}}
 </style></head><body>
+<div class="accent-bar"></div>
+<div class="sheet">
 <div class="hdr">
   <div>${logoHtml}<div class="co-info">${ADDR}<br/>${PHONE}</div></div>
-  <div class="inv-title"><h1>INVOICE</h1><div style="font-weight:bold;font-size:12px">Original Copy</div></div>
+  <div class="inv-title"><div class="inv-badge">INVOICE</div><br/><div class="copy-label">Original Copy</div></div>
 </div>
 <div class="meta-grid">
   <div class="meta-item"><div class="meta-label">Customer / Buyer</div><div class="meta-value">${partyName || '—'}</div></div>
@@ -128,24 +141,25 @@ export const generateInvoiceHTML = (bill) => {
   <div class="meta-item"><div class="meta-label">Date of Issue</div><div class="meta-value">${date}</div></div>
 </div>
 <table>
-  <thead><tr><th>#</th><th>Product Description</th><th>Color</th><th>Brand</th><th>MIC</th><th>CTN</th><th>P.Qty</th><th>Total Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+  <thead><tr><th>#</th><th style="text-align:left;padding-left:12px">Product Description</th><th>Color</th><th>Brand</th><th>MIC</th><th>CTN</th><th>P.Qty</th><th>Total Qty</th><th>Rate</th><th>Amount</th></tr></thead>
   <tbody>${rowsHtml}</tbody>
 </table>
 <div class="footer-area">
   <div class="words-box">
-    <div class="meta-label" style="margin-bottom:8px">Amount in Words</div>
-    <div style="font-size:11px;font-weight:bold;font-style:italic">"${toWords(grandTotal)}"</div>
-    <div style="margin-top:15px;font-size:12px;font-weight:bold">Total Cartons: ${totalCartonCount} CTN</div>
+    <div class="meta-label">Amount in Words</div>
+    <div class="words-text">"${toWords(grandTotal)}"</div>
+    <div class="cartons-line">Total Cartons: ${totalCartonCount} CTN</div>
   </div>
   <div class="total-card">
     <div class="total-label">Grand Total (PKR)</div>
-    <div class="total-val">${grandTotal.toLocaleString()}</div>
+    <div class="total-val">Rs. ${grandTotal.toLocaleString()}</div>
   </div>
 </div>
 <div class="sigs">
   <div class="sig-line">Prepared By</div>
   <div class="sig-line">Receiver's Signature</div>
   <div class="sig-line">Authorized Manager</div>
+</div>
 </div>
 <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
 </body></html>`;
@@ -162,7 +176,10 @@ const SaleInvoice = () => {
   const [formErrs,   setFormErrs]   = useState({});
   const [headerErrs, setHeaderErrs] = useState({});
   const [rows,       setRows]       = useState([]);
-  const [carton,     setCarton]     = useState(emptyCarton);
+  const [cartonForm, setCartonForm] = useState(emptyCartonRow);
+  const [cartonRows, setCartonRows] = useState([]);      // pending carton deductions for this bill
+  const [removedCartons, setRemovedCartons] = useState([]); // undo buffer for accidentally removed rows
+  const [editCartonId, setEditCartonId] = useState(null);
   const [logo,       setLogo]       = useState(null);
   const [msg,        setMsg]        = useState('');
   const [cartonMsg,  setCartonMsg]  = useState(''); 
@@ -170,7 +187,46 @@ const SaleInvoice = () => {
   const fileRef = useRef(null);
 
   const upd  = (k, v) => { setForm(p => ({...p, [k]: v})); setFormErrs(p => ({...p, [k]: ''})); };
-  const updC = (k, v) => setCarton(p => ({...p, [k]: v}));
+  const updCartonForm = (k, v) => setCartonForm(p => ({...p, [k]: v}));
+
+  // ── Carton deduction rows: add / edit / delete / undo ──────────────
+  const addOrUpdateCartonRow = () => {
+    const qty = parseInt(cartonForm.qty) || 0;
+    if (!cartonForm.brand || qty <= 0) return;
+    if (editCartonId) {
+      setCartonRows(p => p.map(r => r.id === editCartonId ? { ...cartonForm, id: editCartonId, qty } : r));
+      setEditCartonId(null);
+    } else {
+      setCartonRows(p => [...p, { id: Date.now(), ...cartonForm, qty }]);
+    }
+    setCartonForm(emptyCartonRow);
+  };
+
+  const startEditCartonRow = (row) => {
+    setCartonForm({ brand: row.brand, type: row.type, size: row.size, qty: String(row.qty) });
+    setEditCartonId(row.id);
+  };
+
+  const cancelEditCartonRow = () => {
+    setCartonForm(emptyCartonRow);
+    setEditCartonId(null);
+  };
+
+  const removeCartonRow = (id) => {
+    const row = cartonRows.find(r => r.id === id);
+    if (!row) return;
+    setCartonRows(p => p.filter(r => r.id !== id));
+    setRemovedCartons(p => [{ ...row, removedAt: Date.now() }, ...p].slice(0, 10)); // keep last 10 for undo
+    if (editCartonId === id) cancelEditCartonRow();
+  };
+
+  const undoRemoveCartonRow = (id) => {
+    const entry = removedCartons.find(r => r.id === id);
+    if (!entry) return;
+    const { removedAt, ...row } = entry;
+    setCartonRows(p => [...p, row]);
+    setRemovedCartons(p => p.filter(r => r.id !== id));
+  };
 
   const validateItem = () => {
     const e = {};
@@ -196,7 +252,7 @@ const SaleInvoice = () => {
     const pc = parseFloat(form.perCtnQty)   || 0;
     const r  = parseFloat(form.rate)        || 0;
     const totalQty = tc * pc;
-    const total = totalQty * r; 
+    const total    = totalQty * r;
     const sizeLabel = [form.sizeMm ? `${form.sizeMm}mm` : '', form.sizeInch ? `${form.sizeInch}` : '', form.yards ? `${form.yards}yds` : ''].filter(Boolean).join(' / ');
     setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total }]);
     setForm(emptyItem);
@@ -208,30 +264,31 @@ const SaleInvoice = () => {
     if (!validateHeader()) return;
     if (rows.length === 0) { setMsg('❌ Koi item add nahi hua!'); return; }
 
-    // Validate carton stock BEFORE saving anything — previously a missing
-    // or insufficient carton match failed silently (bill saved as if the
-    // carton deduction happened, when it either didn't happen at all or
-    // was clamped short without telling anyone).
-    let cartonInv = null;
-    const cartonQty = parseInt(carton.qty) || 0;
-    if (carton.brand && cartonQty > 0) {
-      cartonInv = inventory.find(i => i.brand === carton.brand && i.category === 'Carton' && (i.carton_type || i.cartonType) === carton.type && String(i.size) === String(carton.size));
-      if (!cartonInv) {
-        setMsg(`❌ No matching carton stock found for ${carton.brand} ${carton.type} ${carton.size}" — add it to inventory first.`);
+    // Validate every pending carton row BEFORE saving anything — a missing
+    // or insufficient carton match fails the whole save with a clear error
+    // instead of silently skipping that row's deduction.
+    const resolvedCartons = [];
+    for (const c of cartonRows) {
+      const cQty = Number(c.qty) || 0;
+      if (!c.brand || cQty <= 0) continue;
+      const match = inventory.find(i => i.brand === c.brand && i.category === 'Carton' && (i.carton_type || i.cartonType) === c.type && String(i.size) === String(c.size));
+      if (!match) {
+        setMsg(`❌ No matching carton stock found for ${c.brand} ${c.type} ${c.size}" — add it to inventory first.`);
         return;
       }
-      if (Number(cartonInv.qty || 0) < cartonQty) {
-        setMsg(`❌ Not enough carton stock: only ${cartonInv.qty} available, need ${cartonQty}.`);
+      if (Number(match.qty || 0) < cQty) {
+        setMsg(`❌ Not enough carton stock: only ${match.qty} available for ${c.brand} ${c.type} ${c.size}", need ${cQty}.`);
         return;
       }
+      resolvedCartons.push({ ...c, qty: cQty, inv: match });
     }
 
     setSaving(true);
     try {
-      // Save the bill first. If carton stock adjustment fails after this,
-      // the bill still exists as a record — safer than the reverse order,
+      // Save the bill first. If a carton deduction fails after this, the
+      // bill still exists as a record — safer than the reverse order,
       // where a stock deduction could succeed with no bill to explain it.
-      const savedBill = await saveBill({ billType: 'Sale', billNo, partyName: buyerName, date, items: rows, grandTotal, totalCartonCount, cartonUsed: carton.brand ? carton : null, logo });
+      const savedBill = await saveBill({ billType: 'Sale', billNo, partyName: buyerName, date, items: rows, grandTotal, totalCartonCount, cartonUsed: resolvedCartons.length ? resolvedCartons.map(({inv, ...c}) => c) : null, logo });
 
       await postLedger({
         party_name: buyerName,
@@ -244,13 +301,15 @@ const SaleInvoice = () => {
         bill_id: savedBill.id,
       });
 
-      if (cartonInv) {
-        await updateStock(cartonInv._id || cartonInv.id, -cartonQty);
-        setCartonMsg(`Inventory Updated: ${cartonQty} ${carton.brand} ${carton.type} Cartons deducted successfully.`);
+      for (const c of resolvedCartons) {
+        await updateStock(c.inv._id || c.inv.id, -c.qty);
+      }
+      if (resolvedCartons.length) {
+        setCartonMsg(`Inventory Updated: ${resolvedCartons.map(c => `${c.qty} ${c.brand} ${c.type}`).join(', ')} deducted successfully.`);
       }
 
       setMsg(`✅ Bill #${billNo} save ho gaya!`);
-      setRows([]); setBillNo(''); setBuyerName(''); setCarton(emptyCarton); setHeaderErrs({});
+      setRows([]); setBillNo(''); setBuyerName(''); setCartonRows([]); setRemovedCartons([]); setCartonForm(emptyCartonRow); setHeaderErrs({});
       setTimeout(() => { setMsg(''); setCartonMsg(''); }, 6000);
     } catch (err) { setMsg('❌ Error: ' + err.message); } finally { setSaving(false); }
   };
@@ -327,12 +386,55 @@ const SaleInvoice = () => {
 
       <div className="bg-yellow-500/5 p-5 rounded-[2rem] border border-yellow-500/20 mb-5">
         <p className="text-[10px] text-yellow-500 uppercase font-black tracking-widest mb-3 flex items-center gap-2"><Box size={14}/> Stock Sync (Internal Carton Use)</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <select value={carton.brand} onChange={e => updC('brand', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"><option value="">Select Brand</option>{CARTON_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}</select>
-          <select value={carton.type} onChange={e => updC('type', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"><option value="Small">Small</option><option value="Large">Large</option></select>
-          <select value={carton.size} onChange={e => updC('size', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none">{CARTON_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}</select>
-          <input type="number" value={carton.qty} onChange={e => updC('qty', e.target.value)} placeholder="Qty" className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"/>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <select value={cartonForm.brand} onChange={e => updCartonForm('brand', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"><option value="">Select Brand</option>{CARTON_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}</select>
+          <select value={cartonForm.type} onChange={e => updCartonForm('type', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"><option value="Small">Small</option><option value="Large">Large</option></select>
+          <select value={cartonForm.size} onChange={e => updCartonForm('size', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none">{CARTON_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}</select>
+          <input type="number" value={cartonForm.qty} onChange={e => updCartonForm('qty', e.target.value)} placeholder="Qty to minus" className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"/>
+          <div className="flex gap-2">
+            <button onClick={addOrUpdateCartonRow} className="flex-1 bg-yellow-500 text-black font-black text-xs uppercase rounded-xl px-3 py-3 hover:bg-yellow-400 transition flex items-center justify-center gap-1.5">
+              <Minus size={13}/> {editCartonId ? 'Update' : 'Minus'}
+            </button>
+            {editCartonId && (
+              <button onClick={cancelEditCartonRow} className="px-3 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-red-400 transition text-xs font-bold">
+                <X size={13}/>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Pending carton deductions for this bill */}
+        {cartonRows.length > 0 && (
+          <div className="mt-4 space-y-1.5">
+            <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">Cartons Being Minused ({cartonRows.length})</p>
+            {cartonRows.map(r => (
+              <div key={r.id} className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border text-sm ${editCartonId === r.id ? 'bg-yellow-500/10 border-yellow-500/40' : 'bg-black/20 border-white/5'}`}>
+                <span className="font-bold text-white">{r.brand} — {r.type} — {r.size}"</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-yellow-400 font-black">-{r.qty}</span>
+                  <button onClick={() => startEditCartonRow(r)} className="p-1.5 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition"><Pencil size={13}/></button>
+                  <button onClick={() => removeCartonRow(r.id)} className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"><Trash2 size={13}/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Undo log — brings back an accidentally-removed row */}
+        {removedCartons.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-white/5 space-y-1.5">
+            <p className="text-[9px] text-gray-600 uppercase font-bold tracking-widest">Recently Removed — Undo Available</p>
+            {removedCartons.map(r => (
+              <div key={r.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-black/10 border border-white/5 text-sm opacity-70">
+                <span className="text-gray-400 line-through">{r.brand} — {r.type} — {r.size}" (-{r.qty})</span>
+                <button onClick={() => undoRemoveCartonRow(r.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:text-yellow-400 hover:border-yellow-500/30 transition text-xs font-bold uppercase">
+                  <RotateCcw size={12}/> Undo
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white/[0.02] rounded-[2rem] border border-white/5 overflow-hidden mb-8">
