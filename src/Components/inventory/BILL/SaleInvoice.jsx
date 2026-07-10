@@ -196,7 +196,7 @@ const SaleInvoice = () => {
     const pc = parseFloat(form.perCtnQty)   || 0;
     const r  = parseFloat(form.rate)        || 0;
     const totalQty = tc * pc;
-    const total    = totalQty * r;
+    const total = tc * r;
     const sizeLabel = [form.sizeMm ? `${form.sizeMm}mm` : '', form.sizeInch ? `${form.sizeInch}` : '', form.yards ? `${form.yards}yds` : ''].filter(Boolean).join(' / ');
     setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total }]);
     setForm(emptyItem);
