@@ -121,7 +121,7 @@ const Tan = () => { // Capitalized component name (Standard Practice)
           <p className="text-xs text-gray-500 uppercase font-bold mb-3">Search Inventory</p>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#22c55e]/60" size={18} />
-            <input placeholder="Roll number likhein..." className="w-full pl-10 p-3 bg-black/40 rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e] transition-all text-sm" onChange={e => setSearch(e.target.value)} />
+            <input placeholder="Roll number likhein..." className="w-full pl-10 p-3 bg-black/40 rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e] transition-all text-sm text-white placeholder:text-gray-500" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
       </div>
