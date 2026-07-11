@@ -13,11 +13,14 @@ export const displayRoll = (rollNo) => {
   return isNaN(n) ? s : String(n);
 };
 
+// Exact match only — searching "1" should find ONLY roll #1, not every
+// roll whose number happens to contain a "1" (10, 11, 12, 21...). That
+// substring behavior was the previous implementation and made search
+// unusable once there were more than a handful of rolls.
 export const rollMatches = (rollNo, query) => {
   const q = String(query ?? '').trim();
   if (!q) return true;
-  const raw = String(rollNo ?? '');
-  return displayRoll(rollNo).includes(q) || raw.includes(q);
+  return displayRoll(rollNo) === q || String(rollNo ?? '') === q;
 };
 
 export const StockContext = createContext();
