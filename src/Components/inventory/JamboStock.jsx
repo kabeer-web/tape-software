@@ -5,6 +5,7 @@ import { Package, AlertTriangle, Layers, ArrowRight } from 'lucide-react';
 
 const JAMBO_TYPES = [
   { cat:'Clear',      label:'Clear Tape',      path:'/inventory/jambo/clear' },
+  { cat:'Lemon',      label:'Lemon Tape',      path:'/inventory/jambo/lemon' },
   { cat:'Tan',        label:'Tan Tape',         path:'/inventory/jambo/tan' },
   { cat:'SuperYellow',label:'Super Yellow',     path:'/inventory/jambo/super-yellow' },
   { cat:'SuperClear', label:'Super Clear',      path:'/inventory/jambo/super-clear' },
