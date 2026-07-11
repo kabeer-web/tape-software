@@ -102,6 +102,7 @@ const MasterSearch = () => {
         kind: 'Inventory',
         title, subtitle,
         date: i.date || '',
+        idNumber: isJambo ? displayRoll(i.roll_no || i.rollNo) : null, // for exact numeric-query matching
         searchable: [i.roll_no, i.rollNo, displayRoll(i.roll_no || i.rollNo), cat, i.brand, i.micron, i.width, i.color, i.side, i.ply, i.carton_type, i.cartonType, i.size].filter(Boolean).join(' '),
         raw: i,
       });
@@ -114,6 +115,7 @@ const MasterSearch = () => {
         title: `${b.billType} Bill #${b.billNo || '—'}`,
         subtitle: `${b.partyName || 'Unknown Party'} • Rs. ${Number(b.grandTotal || 0).toLocaleString()}`,
         date: b.date || '',
+        idNumber: b.billNo ? String(b.billNo).trim() : null,
         searchable: [b.billNo, b.partyName, b.billType, b.date, ...(b.items || []).map(it => `${it.brand || ''} ${it.mainCategory || ''} ${it.colour || ''} ${it.specsLabel || ''}`)].filter(Boolean).join(' '),
         raw: b,
       });
@@ -126,6 +128,7 @@ const MasterSearch = () => {
         title: `Production — Roll #${displayRoll(p.roll_no) || '—'}`,
         subtitle: `${p.jambo_type || ''} • ${p.core_brand || ''} ${p.core_side || ''} ${p.core_ply || ''} • ${p.yards_used || 0} yds`,
         date: p.date || '',
+        idNumber: displayRoll(p.roll_no) || null,
         searchable: [p.roll_no, displayRoll(p.roll_no), p.jambo_type, p.core_brand, p.core_side, p.core_ply, p.micron, p.width, p.date].filter(Boolean).join(' '),
         raw: p,
       });
@@ -148,9 +151,21 @@ const MasterSearch = () => {
 
   const masterResults = useMemo(() => {
     if (!masterQuery.trim() && masterKind === 'All') return [];
+    const q = masterQuery.trim();
+    const isPureNumber = q !== '' && !isNaN(q);
     return allRecords
       .filter(r => masterKind === 'All' || r.kind === masterKind)
-      .filter(r => tokenMatch(r.searchable, masterQuery))
+      .filter(r => {
+        if (!q) return true;
+        if (isPureNumber) {
+          // A pure number means "find this exact roll/invoice number" —
+          // substring matching here was the "search 1, get 1/10/11/21..."
+          // problem. Records with no numeric id (e.g. Ledger) just won't
+          // match a numeric query, which is correct — they don't have one.
+          return r.idNumber != null && r.idNumber === q;
+        }
+        return tokenMatch(r.searchable, q);
+      })
       .slice(0, 60); // cap — a query this broad could match hundreds of rows
   }, [allRecords, masterQuery, masterKind]);
 
