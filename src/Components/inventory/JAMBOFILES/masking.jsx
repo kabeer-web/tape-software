@@ -4,7 +4,7 @@ import { Search, PlusCircle, MinusCircle, Pencil, Trash2, Check, X, Package, Lay
 
 const LOW = 50;
 
-const Masking = () => {
+const Tissue = () => {
   const { inventory, addRoll, removeItem, issueYards, editItemYards, loading } = useContext(StockContext);
   const [search, setSearch] = useState('');
   const [issueQty, setIssueQty] = useState({});
@@ -12,14 +12,14 @@ const Masking = () => {
   const [editValue, setEditValue] = useState('');
 
   const filtered = inventory.filter(i =>
-    (i.category === 'Masking' || i.type === 'Masking') &&
+    (i.category === 'Tissue' || i.type === 'Tissue') &&
     rollMatches(i.rollNo || i.roll_no, search)
   );
 
   const totalYards = filtered.reduce((s, i) => s + (Number(i.yards) || 0), 0);
   const lowCount = filtered.filter(i => Number(i.yards) < LOW).length;
 
-  const handleAdd = async (e) => {
+const handleAdd = async (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
   const yards = parseFloat(f.get('yards'));
@@ -27,8 +27,8 @@ const Masking = () => {
   try {
     const weight = parseFloat(f.get('weight')) || 0;
     await addRoll({
-      category: 'Masking',
-      type: 'Masking',
+      category: 'Tissue',
+      type: 'Tissue',
       micron: f.get('micron'),
       width: f.get('width'),
       yards,
@@ -65,7 +65,7 @@ const Masking = () => {
   return (
     <div className="text-white min-h-screen">
       <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">MASKING TAPE</h1>
+        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">TISSUE TAPE</h1>
         <p className="text-gray-500 text-xs mt-1">Jambo Roll Inventory</p>
       </div>
 
@@ -95,7 +95,7 @@ const Masking = () => {
             <select name="width" required className="bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
               <option value="">Width</option>
               <option value="1280">1280mm</option>
-              <option value="1000">1000mm</option>
+
             </select>
           </div>
           <input name="yards" type="number" placeholder="Yards" required className="w-full bg-black/30 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm" />
@@ -158,4 +158,4 @@ const Masking = () => {
   );
 };
 
-export default Masking;
+export default Tissue;
