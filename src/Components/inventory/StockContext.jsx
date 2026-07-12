@@ -203,11 +203,13 @@ export const StockProvider = ({ children }) => {
   };
 
   // ✅ Inline-edit a roll's yards to an exact value (correction, not a delta).
+  // Negative values ARE allowed on purpose — if production overdrew a roll,
+  // the shortfall should be visible as e.g. "-5", not silently floored to 0.
   const editItemYards = async (id, value) => {
     const item = inventoryRef.current.find(i => i._id === id || i.id === id);
     if (!item) return;
     const v = Number(value);
-    if (isNaN(v) || v < 0) return;
+    if (isNaN(v)) return;
     const newVal = parseFloat(v.toFixed(4));
     try {
       const updated = await updateInventory(item._id || item.id, { yards: newVal });
@@ -215,10 +217,40 @@ export const StockProvider = ({ children }) => {
     } catch (e) { console.error(e); alert("Update failed"); }
   };
 
+  // ✅ Full-row edit for a Jambo roll — roll number, micron, width, color,
+  // weight, yards — whatever fields are passed in `updates`. This is what
+  // lets a roll be corrected end-to-end (including a manual roll-no fix),
+  // not just its yards. `rollNo` (camelCase) is translated to the DB's
+  // `roll_no` column. Yards is allowed to be negative (see editItemYards).
+  // Roll-number uniqueness is enforced by the DB (see
+  // migrations/002_inventory_roll_no_unique.sql) — a duplicate throws and
+  // the caller should show that message to the user.
+  const editItem = async (id, updates) => {
+    const item = inventoryRef.current.find(i => i._id === id || i.id === id);
+    if (!item) return;
+    const payload = { ...updates };
+    if (payload.rollNo !== undefined) {
+      payload.roll_no = String(payload.rollNo).trim();
+      delete payload.rollNo;
+    }
+    if (payload.yards !== undefined) {
+      const v = Number(payload.yards);
+      if (isNaN(v)) delete payload.yards;
+      else payload.yards = parseFloat(v.toFixed(4));
+    }
+    const updated = await updateInventory(item._id || item.id, payload);
+    setInventory(prev => prev.map(i => (i._id === id || i.id === id) ? updated : i));
+    return updated;
+  };
+
+  // Deliberately no floor here — a Jambo roll's yards (or any field this is
+  // used on) can go negative, e.g. if Production draws more than is left.
+  // That should show up as a visible negative number so the mistake gets
+  // caught, instead of being silently clamped to 0 and hidden.
   const adjustStock = async (item, field, delta) => {
     const id = item._id || item.id;
     const currentVal = Number(item[field]) || 0;
-    const newVal = Math.max(0, parseFloat((currentVal + delta).toFixed(4)));
+    const newVal = parseFloat((currentVal + delta).toFixed(4));
     try {
       const updated = await updateInventory(id, { [field]: newVal });
       setInventory(prev => prev.map(i => (i._id === id) ? updated : i));
@@ -229,7 +261,7 @@ export const StockProvider = ({ children }) => {
     <StockContext.Provider value={{
       inventory, loading, refreshInventory,
       adjustStock, addRoll, updateStock, removeItem, setInventory,
-      issueYards, editItemYards, upsertStock, resetInventory
+      issueYards, editItemYards, editItem, upsertStock, resetInventory
     }}>
       {children}
     </StockContext.Provider>
