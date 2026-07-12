@@ -106,7 +106,12 @@ const handleSearch = async () => {
   const availYards = rollFound ? Number(rollFound.yards || 0) : 0;
   const tooMany = rollFound && totalYards > 0 && totalYards > availYards;
   const coreShortage = coreItem && coreQty > 0 && coreQty > Number(coreItem.qty || 0);
-  const isReady = Boolean(rollFound && !tooMany && coreItem && !coreShortage && coreQty > 0 && yardsPerCore > 0);
+  // Note: tooMany is intentionally NOT blocking save anymore — some
+  // productions legitimately need to draw down a roll to its last yard
+  // (or the user has decided to proceed anyway). The warning still shows
+  // (red summary box), and the actual stock deduction can never go
+  // negative regardless — adjustStock() clamps to 0.
+  const isReady = Boolean(rollFound && coreItem && !coreShortage && coreQty > 0 && yardsPerCore > 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
