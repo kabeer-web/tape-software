@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect, useMemo } from 'react';
-import { StockContext, displayRoll } from './StockContext';
+import { StockContext, displayRoll, rollMatches } from './StockContext';
 import {
   getInventoryByRoll, getProductions,
   addProduction, updateProduction, deleteProduction
@@ -40,6 +40,7 @@ const Production = () => {
   const [rollFound, setRollFound] = useState(null);
   const [rollErr, setRollErr] = useState('');
   const [rollLoading, setRollLoading] = useState(false);
+  const [logSearch, setLogSearch] = useState('');
 
   useEffect(() => {
     getProductions()
@@ -100,18 +101,29 @@ const handleSearch = async () => {
     ) || null;
   }, [inventory, form]);
 
+  // Logs tab: search by Jambo roll #, then group all entries for the same
+  // roll together (instead of pure created_at order) — e.g. Roll #1 today,
+  // then #2/#3/#4, then another #1 entry later: all #1 entries now sit next
+  // to each other instead of the second one landing at the top on its own.
+  const visibleProductions = (() => {
+    const q = logSearch.trim();
+    const base = q ? productions.filter(p => rollMatches(p.roll_no, q)) : productions;
+    const groups = new Map();
+    for (const p of base) {
+      const key = displayRoll(p.roll_no) || '—';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    }
+    return Array.from(groups.values()).flat();
+  })();
+
   const coreQty = parseFloat(form.coreQty) || 0;
   const yardsPerCore = parseFloat(form.yardsPerCore) || 0;
   const totalYards = parseFloat((coreQty * yardsPerCore).toFixed(2));
   const availYards = rollFound ? Number(rollFound.yards || 0) : 0;
   const tooMany = rollFound && totalYards > 0 && totalYards > availYards;
   const coreShortage = coreItem && coreQty > 0 && coreQty > Number(coreItem.qty || 0);
-  // Note: tooMany is intentionally NOT blocking save anymore — some
-  // productions legitimately need to draw down a roll to its last yard
-  // (or the user has decided to proceed anyway). The warning still shows
-  // (red summary box), and the actual stock deduction can never go
-  // negative regardless — adjustStock() clamps to 0.
-  const isReady = Boolean(rollFound && coreItem && !coreShortage && coreQty > 0 && yardsPerCore > 0);
+  const isReady = Boolean(rollFound && !tooMany && coreItem && !coreShortage && coreQty > 0 && yardsPerCore > 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -149,15 +161,65 @@ const handleSearch = async () => {
     finally { setSaving(false); }
   };
 
+  // Deleting a log entry ONLY removes the log — it does NOT push yards/core
+  // qty back into the Jambo/Core stock. (Previously it did, which meant
+  // deleting a mistaken entry silently re-inflated stock that may have
+  // already moved on elsewhere — confusing and not wanted.) If stock genuinely
+  // needs correcting, do that directly on the Jambo/Core page.
   const handleDelete = async (p) => {
-    if (!window.confirm('Delete and restore stock?')) return;
+    if (!window.confirm('Delete this production log entry? (Stock will NOT be restored — edit it directly on the Jambo page if needed.)')) return;
     try {
-      if (p.roll_snapshot) await adjustStock(p.roll_snapshot, 'yards', Number(p.yards_used || 0));
-      if (p.core_snapshot) await adjustStock(p.core_snapshot, 'qty', Number(p.core_qty_used || 0));
       await deleteProduction(p._id);
       setProductions(prev => prev.filter(x => x._id !== p._id));
-      flash('✅ Record deleted and stock restored');
-    } catch (err) { flash('❌ Delete error: ' + err.message, false); await refreshInventory(); }
+      flash('✅ Record deleted');
+    } catch (err) { flash('❌ Delete error: ' + err.message, false); }
+  };
+
+  // ── Inline edit of a saved log entry ─────────────────────────────
+  // Editing a log is a pure record correction — like delete, it does NOT
+  // touch Jambo/Core stock. It just fixes what was written down.
+  const [editId, setEditId] = useState(null);
+  const [editRow, setEditRow] = useState({});
+
+  const startRowEdit = (p) => {
+    setEditId(p._id);
+    setEditRow({
+      date: p.date || '',
+      roll_no: displayRoll(p.roll_no),
+      core_brand: p.core_brand || '',
+      core_side: p.core_side || '',
+      core_ply: p.core_ply || '',
+      core_qty_used: String(p.core_qty_used ?? ''),
+      yards_per_core: String(p.yards_per_core ?? ''),
+      yards_used: String(p.yards_used ?? ''),
+    });
+  };
+  const cancelRowEdit = () => { setEditId(null); setEditRow({}); };
+
+  const saveRowEdit = async (p) => {
+    const coreQtyUsed = parseFloat(editRow.core_qty_used) || 0;
+    const yardsPerCore = parseFloat(editRow.yards_per_core) || 0;
+    // Recompute yards_used from qty × yards-per-core unless the user
+    // overrode it directly.
+    const yardsUsedTyped = parseFloat(editRow.yards_used);
+    const yardsUsed = !isNaN(yardsUsedTyped) ? yardsUsedTyped : parseFloat((coreQtyUsed * yardsPerCore).toFixed(2));
+    try {
+      const updated = await updateProduction(p._id, {
+        date: editRow.date,
+        roll_no: editRow.roll_no,
+        core_brand: editRow.core_brand,
+        core_side: editRow.core_side,
+        core_ply: editRow.core_ply,
+        core_qty_used: coreQtyUsed,
+        yards_per_core: yardsPerCore,
+        yards_used: yardsUsed,
+      });
+      setProductions(prev => prev.map(x => x._id === p._id ? updated : x));
+      flash('✅ Log entry updated');
+      cancelRowEdit();
+    } catch (err) {
+      flash('❌ Update error: ' + err.message, false);
+    }
   };
 
   const InputLabel = ({ children }) => <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-1 block">{children}</label>;
@@ -324,47 +386,105 @@ const handleSearch = async () => {
         </form>
       ) : (
         /* HISTORY LOGS */
-        <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl animate-in slide-in-from-bottom-6">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                <tr><th className="p-6">Date</th><th className="p-6">Identity</th><th className="p-6">Core Specs</th><th className="p-6 text-center">Batch Size</th><th className="p-6 text-center">Net Yards</th><th className="p-6 text-right">Actions</th></tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {productions.length === 0 ? (
-                  <tr><td colSpan={6} className="p-32 text-center text-slate-700 font-bold uppercase tracking-widest italic">No activity recorded yet.</td></tr>
-                ) : productions.map(p => (
-                  <tr key={p._id || p.id} className="hover:bg-white/5 transition-all group">
-                    <td className="p-6 text-sm font-bold text-slate-500 font-mono">{p.date}</td>
-                    <td className="p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-black/40 flex items-center justify-center font-black text-[#10b981] border border-white/5 shadow-inner text-lg">
-                          #{displayRoll(p.roll_no)}
+        <div className="space-y-4 animate-in slide-in-from-bottom-6">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+            <input
+              value={logSearch}
+              onChange={e => setLogSearch(e.target.value)}
+              placeholder="Search logs by Jambo roll #..."
+              className="w-full pl-11 pr-4 py-3 bg-white/[0.02] border border-white/10 rounded-2xl outline-none focus:border-[#10b981]/50 text-sm font-bold text-white placeholder:text-slate-600"
+            />
+          </div>
+
+          <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden backdrop-blur-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                  <tr><th className="p-6">Date</th><th className="p-6">Identity</th><th className="p-6">Core Specs</th><th className="p-6 text-center">Batch Size</th><th className="p-6 text-center">Net Yards</th><th className="p-6 text-right">Actions</th></tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {visibleProductions.length === 0 ? (
+                    <tr><td colSpan={6} className="p-32 text-center text-slate-700 font-bold uppercase tracking-widest italic">No activity recorded yet.</td></tr>
+                  ) : visibleProductions.map(p => {
+                    const isEditingRow = editId === p._id;
+                    return (
+                    <tr key={p._id || p.id} className="hover:bg-white/5 transition-all group">
+                      <td className="p-6 text-sm font-bold text-slate-500 font-mono">
+                        {isEditingRow ? (
+                          <input value={editRow.date} onChange={e => setEditRow(r => ({ ...r, date: e.target.value }))} className="w-24 bg-black/40 p-2 rounded-lg border border-[#10b981]/40 outline-none text-xs" />
+                        ) : p.date}
+                      </td>
+                      <td className="p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-black/40 flex items-center justify-center font-black text-[#10b981] border border-white/5 shadow-inner text-lg shrink-0">
+                            #{isEditingRow ? (
+                              <input value={editRow.roll_no} onChange={e => setEditRow(r => ({ ...r, roll_no: e.target.value }))} className="w-10 bg-transparent outline-none text-center" />
+                            ) : displayRoll(p.roll_no)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-white">{p.jambo_type}</p>
+                            <p className="text-[10px] font-black text-slate-500 uppercase">{p.micron}μ • {p.width}mm</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-black text-white">{p.jambo_type}</p>
-                          <p className="text-[10px] font-black text-slate-500 uppercase">{p.micron}μ • {p.width}mm</p>
+                      </td>
+                      <td className="p-6">
+                        {isEditingRow ? (
+                          <div className="flex flex-col gap-1.5">
+                            <select value={editRow.core_brand} onChange={e => setEditRow(r => ({ ...r, core_brand: e.target.value }))} className="bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-xs">
+                              {CORE_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                            <div className="flex gap-1.5">
+                              <select value={editRow.core_side} onChange={e => setEditRow(r => ({ ...r, core_side: e.target.value }))} className="bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-xs">
+                                {['D/S', 'S/S'].map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                              <select value={editRow.core_ply} onChange={e => setEditRow(r => ({ ...r, core_ply: e.target.value }))} className="bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-xs">
+                                {PLY_OPTIONS.map(pl => <option key={pl} value={pl}>{pl} Ply</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs font-black text-white uppercase tracking-tight">{p.core_brand}</span>
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase mt-0.5">
+                              <span className="text-[#10b981] bg-[#10b981]/10 px-1.5 rounded-md">{p.core_side}</span>
+                              <span>• {p.core_ply} Ply</span>
+                            </div>
+                          </>
+                        )}
+                      </td>
+                      <td className="p-6 text-center font-black text-xl">
+                        {isEditingRow ? (
+                          <input type="number" value={editRow.core_qty_used} onChange={e => setEditRow(r => ({ ...r, core_qty_used: e.target.value }))} className="w-16 bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-sm text-center" />
+                        ) : (<>{p.core_qty_used} <small className="text-[9px] opacity-40 uppercase tracking-tighter">pcs</small></>)}
+                      </td>
+                      <td className="p-6 text-center font-black text-xl text-[#10b981]">
+                        {isEditingRow ? (
+                          <input type="number" step="0.01" value={editRow.yards_used} onChange={e => setEditRow(r => ({ ...r, yards_used: e.target.value }))} className="w-20 bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-sm text-center" />
+                        ) : (<>{p.yards_used} <small className="text-[9px] opacity-40 uppercase tracking-tighter">yds</small></>)}
+                      </td>
+                      <td className="p-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {isEditingRow ? (
+                            <>
+                              <button onClick={() => saveRowEdit(p)} className="p-3 bg-[#10b981]/10 text-[#10b981] rounded-xl hover:bg-[#10b981] hover:text-black transition-all"><Check size={18}/></button>
+                              <button onClick={cancelRowEdit} className="p-3 bg-white/5 text-slate-400 rounded-xl hover:bg-white/10 transition-all"><X size={18}/></button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => startRowEdit(p)} className="p-3 bg-white/5 text-slate-400 rounded-xl hover:bg-[#10b981] hover:text-black transition-all opacity-0 group-hover:opacity-100"><Pencil size={16}/></button>
+                              <button onClick={() => handleDelete(p)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-lg shadow-red-500/20">
+                                <Trash2 size={18}/>
+                              </button>
+                            </>
+                          )}
                         </div>
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <span className="text-xs font-black text-white uppercase tracking-tight">{p.core_brand}</span>
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase mt-0.5">
-                        <span className="text-[#10b981] bg-[#10b981]/10 px-1.5 rounded-md">{p.core_side}</span>
-                        <span>• {p.core_ply} Ply</span>
-                      </div>
-                    </td>
-                    <td className="p-6 text-center font-black text-xl">{p.core_qty_used} <small className="text-[9px] opacity-40 uppercase tracking-tighter">pcs</small></td>
-                    <td className="p-6 text-center font-black text-xl text-[#10b981]">{p.yards_used} <small className="text-[9px] opacity-40 uppercase tracking-tighter">yds</small></td>
-                    <td className="p-6 text-right">
-                      <button onClick={() => handleDelete(p)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-lg shadow-red-500/20">
-                        <Trash2 size={18}/>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                    </tr>
+                  );})}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
