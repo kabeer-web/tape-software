@@ -5,7 +5,7 @@ import { Search, PlusCircle, MinusCircle, Pencil, Trash2, Check, X, Package, Lay
 const CAT = 'SuperYellow';
 const TITLE = 'SUPER YELLOW TAPE';
 const LOW = 50;
-const MICRONS = [37, 39, 40, 42, 48];
+const MICRONS = [37, 39, 40, 42,43,44,45,47, 48];
 const WIDTHS = ['1280'];
 
 export default function SuperYellow() {
