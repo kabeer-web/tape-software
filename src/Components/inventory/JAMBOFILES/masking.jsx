@@ -5,8 +5,8 @@ import { Search, PlusCircle, MinusCircle, Pencil, Trash2, Check, X, Package, Lay
 const CAT = 'Masking';
 const TITLE = 'MASKING TAPE';
 const LOW = 50;
-const MICRONS = [37, 39, 40, 42, 48];
-const WIDTHS = ['1280'];
+const MICRONS = [120];
+const WIDTHS = ['1010'];
 
 export default function Masking() {
   const { inventory, addRoll, removeItem, issueYards, editItem, loading } = useContext(StockContext);
