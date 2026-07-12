@@ -5,7 +5,7 @@ import { Search, PlusCircle, MinusCircle, Pencil, Trash2, Check, X, Package, Lay
 const CAT = 'Foam';
 const TITLE = 'FOAM TAPE';
 const LOW = 50;
-const MICRONS = [37, 39, 40, 42, 48];
+const MICRONS = [60,80];
 const WIDTHS = ['1020'];
 
 export default function Foam() {
