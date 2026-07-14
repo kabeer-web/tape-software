@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useMemo } from 'react';
 import { StockContext } from '../StockContext';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import {
@@ -48,11 +48,23 @@ const emptyForm = { mainCategory: 'Core', brand:'', side:'', ply:'', cartonType:
 
 const PurchaseInvoice = () => {
   const { addRoll, upsertStock } = useContext(StockContext);
-  const { saveBill, postLedger } = useAccounts();
+  const { saveBill, postLedger, bills } = useAccounts();
   const [billNo, setBillNo] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [chalanNo, setChalanNo] = useState('');
   const [date, setDate] = useState(new Date().toLocaleDateString('en-GB'));
+
+  // Same fix as Sale Invoice: suggestions used to be only the hardcoded
+  // PURCHASE_PARTIES array, so a supplier already billed before still never
+  // showed up in search next time. Now it's that starter list UNION every
+  // supplier name that's actually in a saved Purchase bill.
+  const supplierSuggestions = useMemo(() => {
+    const set = new Set(PURCHASE_PARTIES);
+    (bills || []).forEach(b => {
+      if (b.billType === 'Purchase' && b.partyName) set.add(String(b.partyName).toUpperCase());
+    });
+    return Array.from(set);
+  }, [bills]);
   const [form, setForm] = useState(emptyForm);
   const [rows, setRows] = useState([]);
   const [msg, setMsg] = useState({ text: '', ok: true });
@@ -136,7 +148,7 @@ const PurchaseInvoice = () => {
 
       <div className="bg-white/5 p-8 rounded-3xl grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <input list="s-list" value={supplierName} onChange={e=>setSupplierName(e.target.value)} placeholder="Supplier Name" className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none focus:border-emerald-500" />
-        <datalist id="s-list">{PURCHASE_PARTIES.map(p=><option key={p} value={p}/>)}</datalist>
+        <datalist id="s-list">{supplierSuggestions.map(p=><option key={p} value={p}/>)}</datalist>
         <input value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="Bill #" className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none" />
         <input value={chalanNo} onChange={e=>setChalanNo(e.target.value)} placeholder="Chalan #" className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none" />
         <input value={date} onChange={e=>setDate(e.target.value)} className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none" />
