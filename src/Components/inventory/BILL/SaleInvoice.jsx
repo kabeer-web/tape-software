@@ -18,7 +18,7 @@ const PARTIES = [
   "SANAULLAH TEXTILE", "SUJJAD ALI", "USAMA STATIONARY", "ZEESHAN HAIDRABAD",
   "WAHEED", "WALI", "AL FAREED", "SHOKAT", "HAYAT GUL", "AMIR AJ", "ARSALAN HAS",
   "MUDASIR MEMON", "UMAIR FISHERY", "AMEER AKBAR", "ISMAIL BHAI", "BILAL BHAI",
-  "FARHAN NEW KARACHI", "N.K ENTERPRISES","SHAKIR"
+  "FARHAN NEW KARACHI", "N.K ENTERPRISES"
 ];
 
 // ── Number to words ──────────────────────────────────────
@@ -189,6 +189,7 @@ const SaleInvoice = () => {
   const [formErrs,   setFormErrs]   = useState({});
   const [headerErrs, setHeaderErrs] = useState({});
   const [rows,       setRows]       = useState([]);
+  const [editRowId,  setEditRowId]  = useState(null);
   const [cartonForm, setCartonForm] = useState(emptyCartonRow);
   const [cartonRows, setCartonRows] = useState([]);      // pending carton deductions for this bill
   const [removedCartons, setRemovedCartons] = useState([]); // undo buffer for accidentally removed rows
@@ -267,11 +268,31 @@ const SaleInvoice = () => {
     const totalQty = tc * pc;
     const total    = totalQty * r;
     const sizeLabel = [form.sizeMm ? `${form.sizeMm}mm` : '', form.sizeInch ? `${form.sizeInch}` : '', form.yards ? `${form.yards}yds` : ''].filter(Boolean).join(' / ');
-    setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total }]);
+    if (editRowId) {
+      setRows(p => p.map(row => row.id === editRowId ? { ...form, id: editRowId, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total } : row));
+      setEditRowId(null);
+    } else {
+      setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total }]);
+    }
     setForm(emptyItem);
   };
 
-  const removeRow = (id) => setRows(p => p.filter(r => r.id !== id));
+  const startEditRow = (row) => {
+    setForm({
+      sizeUnit: row.sizeUnit || 'mm', sizeMm: row.sizeMm || '', sizeInch: row.sizeInch || '',
+      yards: row.yards || '', colour: row.colour || '', brand: row.brand || '',
+      micron: row.micron || '', totalCarton: String(row.totalCarton ?? ''),
+      perCtnQty: String(row.perCtnQty ?? ''), rate: String(row.rate ?? ''),
+    });
+    setEditRowId(row.id);
+  };
+
+  const cancelEditRow = () => { setForm(emptyItem); setEditRowId(null); };
+
+  const removeRow = (id) => {
+    setRows(p => p.filter(r => r.id !== id));
+    if (editRowId === id) cancelEditRow();
+  };
 
   const handleSave = async () => {
     if (!validateHeader()) return;
@@ -322,7 +343,7 @@ const SaleInvoice = () => {
       }
 
       setMsg(`✅ Bill #${billNo} save ho gaya!`);
-      setRows([]); setBillNo(''); setBuyerName(''); setCartonRows([]); setRemovedCartons([]); setCartonForm(emptyCartonRow); setHeaderErrs({});
+      setRows([]); setEditRowId(null); setBillNo(''); setBuyerName(''); setCartonRows([]); setRemovedCartons([]); setCartonForm(emptyCartonRow); setHeaderErrs({});
       setTimeout(() => { setMsg(''); setCartonMsg(''); }, 6000);
     } catch (err) { setMsg('❌ Error: ' + err.message); } finally { setSaving(false); }
   };
@@ -394,7 +415,10 @@ const SaleInvoice = () => {
           <input type="number" placeholder="Rolls P.CTN" value={form.perCtnQty} onChange={e => upd('perCtnQty', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
           <input type="number" placeholder="Rate" value={form.rate} onChange={e => upd('rate', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
         </div>
-        <button onClick={addItem} className="bg-[#22c55e] text-black font-black px-8 py-3 rounded-2xl flex items-center gap-2 hover:bg-emerald-400 transition text-xs uppercase tracking-widest"><Plus size={16}/> Add to List</button>
+        <button onClick={addItem} className="bg-[#22c55e] text-black font-black px-8 py-3 rounded-2xl flex items-center gap-2 hover:bg-emerald-400 transition text-xs uppercase tracking-widest"><Plus size={16}/> {editRowId ? 'Update Item' : 'Add to List'}</button>
+        {editRowId && (
+          <button onClick={cancelEditRow} className="px-4 py-3 rounded-2xl border border-white/10 text-gray-400 hover:text-red-400 transition text-xs font-bold uppercase">Cancel</button>
+        )}
       </div>
 
       <div className="bg-yellow-500/5 p-5 rounded-[2rem] border border-yellow-500/20 mb-5">
@@ -455,7 +479,7 @@ const SaleInvoice = () => {
           <thead className="bg-white/5 text-[10px] uppercase font-black text-slate-500"><tr><th className="p-5">#</th><th>Description</th><th className="text-center">CTN</th><th className="text-center">Total Qty</th><th className="text-right">Rate</th><th className="text-right p-5">Amount</th><th className="p-5"></th></tr></thead>
           <tbody className="divide-y divide-white/5">
             {rows.map((r, i) => (
-              <tr key={r.id} className="hover:bg-white/5 transition"><td className="p-5 text-gray-500">{i+1}</td><td><p className="font-bold">{r.brand} - {r.colour}</p><p className="text-[10px] text-gray-500 uppercase">{r.sizeLabel}</p></td><td className="text-center font-bold">{r.totalCarton}</td><td className="text-center text-emerald-500 font-bold">{r.totalQty}</td><td className="text-right font-mono text-xs">{r.rate.toLocaleString()}</td><td className="text-right font-black text-white p-5">{r.total.toLocaleString()}</td><td className="p-5"><button onClick={() => removeRow(r.id)} className="text-gray-600 hover:text-red-500 transition"><Trash2 size={16}/></button></td></tr>
+              <tr key={r.id} className={`hover:bg-white/5 transition ${editRowId === r.id ? 'bg-yellow-500/10' : ''}`}><td className="p-5 text-gray-500">{i+1}</td><td><p className="font-bold">{r.brand} - {r.colour}</p><p className="text-[10px] text-gray-500 uppercase">{r.sizeLabel}</p></td><td className="text-center font-bold">{r.totalCarton}</td><td className="text-center text-emerald-500 font-bold">{r.totalQty}</td><td className="text-right font-mono text-xs">{r.rate.toLocaleString()}</td><td className="text-right font-black text-white p-5">{r.total.toLocaleString()}</td><td className="p-5"><div className="flex items-center justify-end gap-1"><button onClick={() => startEditRow(r)} className="p-1.5 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition"><Pencil size={14}/></button><button onClick={() => removeRow(r.id)} className="p-1.5 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"><Trash2 size={16}/></button></div></td></tr>
             ))}
           </tbody>
         </table>
