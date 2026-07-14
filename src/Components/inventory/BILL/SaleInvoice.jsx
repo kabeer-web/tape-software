@@ -1,4 +1,4 @@
-import { useState, useRef, useContext, useMemo } from 'react';
+import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import {
   FileText, Plus, Trash2, Printer,
   Upload, X, Save, AlertCircle, Box, Minus, Pencil, RotateCcw
@@ -54,6 +54,21 @@ const CARTON_SIZES  = ['10','10.5','11','12'];
 
 const emptyItem   = { sizeUnit:'mm', sizeMm:'', sizeInch:'', yards:'', colour:'', brand:'', micron:'', totalCarton:'', perCtnQty:'', rate:'' };
 const emptyCartonRow = { brand:'', type:'Small', size:'10', qty:'' };
+
+// ── Draft auto-save ─────────────────────────────────────────
+// Was: navigating to another page (Production, a Jambo file, etc.) mid-bill
+// unmounts this component, and all its useState just resets — the half-typed
+// bill vanished. Now every meaningful change is mirrored to localStorage, and
+// it's read back in on mount, so leaving and coming back restores it exactly
+// where it was left. It only gets cleared on a successful save or an explicit
+// "Discard Draft".
+const SALE_DRAFT_KEY = 'hs_sale_invoice_draft_v1';
+const loadSaleDraft = () => {
+  try {
+    const raw = localStorage.getItem(SALE_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
 
 const SelectOrCustom = ({ value, onChange, options, placeholder }) => {
   const isCustom = value !== '' && !options.includes(value);
@@ -169,8 +184,13 @@ const SaleInvoice = () => {
   const { saveBill, postLedger, bills }      = useAccounts();
   const { inventory, updateStock }    = useContext(StockContext);
 
-  const [billNo,     setBillNo]     = useState('');
-  const [buyerName,  setBuyerName]  = useState('');
+  const [savedDraft] = useState(loadSaleDraft); // read once, on mount only
+  const [showDraftBanner, setShowDraftBanner] = useState(() =>
+    !!(savedDraft && (savedDraft.rows?.length || savedDraft.cartonRows?.length || savedDraft.billNo || savedDraft.buyerName))
+  );
+
+  const [billNo,     setBillNo]     = useState(savedDraft?.billNo || '');
+  const [buyerName,  setBuyerName]  = useState(savedDraft?.buyerName || '');
 
   // Was: datalist only ever showed the hardcoded PARTIES array, so a party
   // like "Shakir" who's already been billed once still never showed up when
@@ -184,21 +204,35 @@ const SaleInvoice = () => {
     });
     return Array.from(set);
   }, [bills]);
-  const [date,       setDate]       = useState(new Date().toLocaleDateString('en-GB'));
-  const [form,       setForm]       = useState(emptyItem);
+  const [date,       setDate]       = useState(savedDraft?.date || new Date().toLocaleDateString('en-GB'));
+  const [form,       setForm]       = useState(savedDraft?.form || emptyItem);
   const [formErrs,   setFormErrs]   = useState({});
   const [headerErrs, setHeaderErrs] = useState({});
-  const [rows,       setRows]       = useState([]);
+  const [rows,       setRows]       = useState(savedDraft?.rows || []);
   const [editRowId,  setEditRowId]  = useState(null);
-  const [cartonForm, setCartonForm] = useState(emptyCartonRow);
-  const [cartonRows, setCartonRows] = useState([]);      // pending carton deductions for this bill
-  const [removedCartons, setRemovedCartons] = useState([]); // undo buffer for accidentally removed rows
+  const [cartonForm, setCartonForm] = useState(savedDraft?.cartonForm || emptyCartonRow);
+  const [cartonRows, setCartonRows] = useState(savedDraft?.cartonRows || []);      // pending carton deductions for this bill
+  const [removedCartons, setRemovedCartons] = useState(savedDraft?.removedCartons || []); // undo buffer for accidentally removed rows
   const [editCartonId, setEditCartonId] = useState(null);
-  const [logo,       setLogo]       = useState(null);
+  const [logo,       setLogo]       = useState(savedDraft?.logo || null);
   const [msg,        setMsg]        = useState('');
   const [cartonMsg,  setCartonMsg]  = useState(''); 
   const [saving,     setSaving]     = useState(false);
   const fileRef = useRef(null);
+
+  // Mirror the in-progress bill to localStorage on every meaningful change.
+  useEffect(() => {
+    const draft = { billNo, buyerName, date, form, rows, cartonForm, cartonRows, removedCartons, logo };
+    try { localStorage.setItem(SALE_DRAFT_KEY, JSON.stringify(draft)); } catch { /* storage full/unavailable — draft just won't persist */ }
+  }, [billNo, buyerName, date, form, rows, cartonForm, cartonRows, removedCartons, logo]);
+
+  const discardDraft = () => {
+    try { localStorage.removeItem(SALE_DRAFT_KEY); } catch {}
+    setBillNo(''); setBuyerName(''); setDate(new Date().toLocaleDateString('en-GB'));
+    setForm(emptyItem); setRows([]); setEditRowId(null);
+    setCartonForm(emptyCartonRow); setCartonRows([]); setRemovedCartons([]); setEditCartonId(null);
+    setLogo(null); setShowDraftBanner(false);
+  };
 
   const upd  = (k, v) => { setForm(p => ({...p, [k]: v})); setFormErrs(p => ({...p, [k]: ''})); };
   const updCartonForm = (k, v) => setCartonForm(p => ({...p, [k]: v}));
@@ -343,6 +377,7 @@ const SaleInvoice = () => {
       }
 
       setMsg(`✅ Bill #${billNo} save ho gaya!`);
+      try { localStorage.removeItem(SALE_DRAFT_KEY); } catch {}
       setRows([]); setEditRowId(null); setBillNo(''); setBuyerName(''); setCartonRows([]); setRemovedCartons([]); setCartonForm(emptyCartonRow); setHeaderErrs({});
       setTimeout(() => { setMsg(''); setCartonMsg(''); }, 6000);
     } catch (err) { setMsg('❌ Error: ' + err.message); } finally { setSaving(false); }
@@ -376,6 +411,16 @@ const SaleInvoice = () => {
       )}
 
       {msg && <div className={`mb-4 p-3 rounded-xl text-sm font-bold border ${msg.startsWith('✅') ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]' : 'bg-red-500/10 border-red-500/40 text-red-400'}`}>{msg}</div>}
+
+      {showDraftBanner && (
+        <div className="mb-4 p-3 rounded-xl text-sm font-bold border bg-yellow-500/10 border-yellow-500/40 text-yellow-300 flex flex-wrap items-center justify-between gap-3">
+          <span>📝 Aapka pichla adhura bill wapis load ho gaya hai.</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowDraftBanner(false)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs uppercase tracking-wide">Keep it</button>
+            <button onClick={discardDraft} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs uppercase tracking-wide"><RotateCcw size={12}/> Discard Draft</button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white/[0.03] p-6 rounded-[2rem] border border-[#22c55e]/20 mb-5">
         <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/5 mb-4">
