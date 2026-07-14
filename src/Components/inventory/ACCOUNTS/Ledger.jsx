@@ -161,6 +161,14 @@ export default function Ledger() {
   const [editId,   setEditId]   = useState(null);
   const [editData, setEditData] = useState({});
 
+  // Parties added via the new "+ New Party" box below but that don't have
+  // any ledger entry yet (a brand-new party has nothing in `entries` until
+  // an opening balance / payment is posted for them, so without this they'd
+  // vanish from the sidebar the moment you clicked away).
+  const [customParties, setCustomParties] = useState([]); // [{ name, type }]
+  const [showAddParty, setShowAddParty]   = useState(false);
+  const [newPartyName, setNewPartyName]   = useState('');
+
   const [msg,    setMsg]    = useState('');
   const [msgOk,  setMsgOk]  = useState(true);
   const [saving, setSaving] = useState(false);
@@ -178,8 +186,25 @@ export default function Ledger() {
   };
 
   // ── Party list with balances ───────────────────────────
+  // Was: ALL_PARTIES.filter(...) — a pure hardcoded array, so a party who
+  // only exists because a Sale/Purchase bill was raised for them (which DOES
+  // save a real ledger_entries row) never showed up here, since this list
+  // never looked at `entries` at all. Now it's the hardcoded starter names
+  // UNION whatever party names actually have entries in the DB UNION anyone
+  // just added via "+ New Party" — so a brand-new party is visible as soon
+  // as they're billed, with no code edit needed.
+  const partyDirectory = useMemo(() => {
+    const dir = new Map(ALL_PARTIES.map(p => [p.name, p.type]));
+    entries.forEach(e => {
+      const n = (e.party_name || '').trim().toUpperCase();
+      if (n && !dir.has(n)) dir.set(n, e.party_type || 'Sale');
+    });
+    customParties.forEach(p => { if (!dir.has(p.name)) dir.set(p.name, p.type); });
+    return Array.from(dir.entries()).map(([name, type]) => ({ name, type }));
+  }, [entries, customParties]);
+
   const partyList = useMemo(() =>
-    ALL_PARTIES
+    partyDirectory
       .filter(p => p.type === activeType)
       .filter(p => !search || p.name.toLowerCase().includes(search.toLowerCase()))
       .map(p => {
@@ -200,7 +225,19 @@ export default function Ledger() {
 
         return { ...p, entries: normalEntries, openingEntry, openingBal, totalDebit, totalCredit, balance };
       })
-  , [entries, activeType, search]);
+  , [partyDirectory, activeType, search, entries]);
+
+  // Type a name, hit Add — selects it immediately (with zero balance) and
+  // opens the Opening Balance box so it gets its first real DB row right away.
+  const handleAddNewParty = () => {
+    const name = newPartyName.trim().toUpperCase();
+    if (!name) return;
+    setCustomParties(prev => prev.some(p => p.name === name) ? prev : [...prev, { name, type: activeType }]);
+    setNewPartyName('');
+    setShowAddParty(false);
+    handlePartySelect(name);
+    setShowOpening(true);
+  };
 
   const activeData = useMemo(() =>
     activeParty ? partyList.find(p => p.name === activeParty) : null
@@ -392,6 +429,26 @@ export default function Ledger() {
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Party search…"
               className="w-full pl-8 p-2.5 bg-white/[0.03] rounded-xl border border-[#22c55e]/20 outline-none text-xs"/>
           </div>
+
+          {showAddParty ? (
+            <div className="flex gap-1.5 mb-3">
+              <input
+                autoFocus
+                value={newPartyName}
+                onChange={e => setNewPartyName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddNewParty(); if (e.key === 'Escape') setShowAddParty(false); }}
+                placeholder={`New ${activeType} party name...`}
+                className="flex-1 min-w-0 p-2.5 bg-white/[0.03] rounded-xl border border-[#22c55e]/40 outline-none text-xs"
+              />
+              <button onClick={handleAddNewParty} className="px-3 rounded-xl bg-[#22c55e] text-black font-bold text-xs shrink-0">Add</button>
+              <button onClick={() => { setShowAddParty(false); setNewPartyName(''); }} className="px-2 rounded-xl bg-white/5 text-gray-400 shrink-0"><X size={14}/></button>
+            </div>
+          ) : (
+            <button onClick={() => setShowAddParty(true)}
+              className="w-full mb-3 flex items-center justify-center gap-1.5 p-2.5 rounded-xl border border-dashed border-[#22c55e]/30 text-[#22c55e] text-xs font-bold hover:bg-[#22c55e]/5 transition">
+              <Plus size={14}/> New {activeType} Party
+            </button>
+          )}
 
           <div className="space-y-1.5 max-h-[70vh] overflow-y-auto pr-1">
             {partyList.map(party => {
