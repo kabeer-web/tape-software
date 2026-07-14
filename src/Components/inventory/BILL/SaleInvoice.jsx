@@ -1,4 +1,4 @@
-import { useState, useRef, useContext } from 'react';
+import { useState, useRef, useContext, useMemo } from 'react';
 import {
   FileText, Plus, Trash2, Printer,
   Upload, X, Save, AlertCircle, Box, Minus, Pencil, RotateCcw
@@ -166,11 +166,24 @@ export const generateInvoiceHTML = (bill) => {
 };
 
 const SaleInvoice = () => {
-  const { saveBill, postLedger }      = useAccounts();
+  const { saveBill, postLedger, bills }      = useAccounts();
   const { inventory, updateStock }    = useContext(StockContext);
 
   const [billNo,     setBillNo]     = useState('');
   const [buyerName,  setBuyerName]  = useState('');
+
+  // Was: datalist only ever showed the hardcoded PARTIES array, so a party
+  // like "Shakir" who's already been billed once still never showed up when
+  // you searched for them again next time — the suggestion list never looked
+  // at real bills at all. Now it's the hardcoded starter names UNION every
+  // buyer name that's actually in a saved Sale bill.
+  const partySuggestions = useMemo(() => {
+    const set = new Set(PARTIES);
+    (bills || []).forEach(b => {
+      if (b.billType === 'Sale' && b.partyName) set.add(String(b.partyName).toUpperCase());
+    });
+    return Array.from(set);
+  }, [bills]);
   const [date,       setDate]       = useState(new Date().toLocaleDateString('en-GB'));
   const [form,       setForm]       = useState(emptyItem);
   const [formErrs,   setFormErrs]   = useState({});
@@ -358,7 +371,7 @@ const SaleInvoice = () => {
           <div className="space-y-1">
             <label className="text-[10px] text-gray-500 uppercase font-black ml-1">Buyer Name</label>
             <input list="parties-list" value={buyerName} onChange={e=>setBuyerName(e.target.value.toUpperCase())} placeholder="Search Party" className="w-full bg-black/30 p-3 rounded-2xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]"/>
-            <datalist id="parties-list">{PARTIES.map((p,i) => <option key={i} value={p}/>)}</datalist>
+            <datalist id="parties-list">{partySuggestions.map((p,i) => <option key={i} value={p}/>)}</datalist>
             {headerErrs.buyerName && <ErrMsg msg={headerErrs.buyerName}/>}
           </div>
 
