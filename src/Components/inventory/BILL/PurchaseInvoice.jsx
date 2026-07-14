@@ -1,8 +1,8 @@
-import { useState, useContext, useMemo } from 'react';
+import { useState, useContext, useMemo, useEffect } from 'react';
 import { StockContext } from '../StockContext';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import {
-  Plus, Trash2, Archive
+  Plus, Trash2, Archive, RotateCcw
 } from 'lucide-react';
 
 const PURCHASE_PARTIES = ['UNIVERSAL COTTING','KOSHER','CHAWLA INDUSTRY','IBAD CORE','TAHSEEN CARTON','TALHA WASEEM','ASGHR CORE','DEER TAPE','SAMAD BHAI'];
@@ -46,13 +46,29 @@ const generatePurchasePrintHTML = (bill) => {
 
 const emptyForm = { mainCategory: 'Core', brand:'', side:'', ply:'', cartonType:'', size:'', jamboCategory:'', color:'', micron:'', width:'', weight:'', qty:'', rate:'' };
 
+// Same fix as Sale Invoice — see the comment there for why this exists:
+// leaving this page mid-bill used to lose everything typed so far.
+const PURCHASE_DRAFT_KEY = 'hs_purchase_invoice_draft_v1';
+const loadPurchaseDraft = () => {
+  try {
+    const raw = localStorage.getItem(PURCHASE_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
+
 const PurchaseInvoice = () => {
   const { addRoll, upsertStock } = useContext(StockContext);
   const { saveBill, postLedger, bills } = useAccounts();
-  const [billNo, setBillNo] = useState('');
-  const [supplierName, setSupplierName] = useState('');
-  const [chalanNo, setChalanNo] = useState('');
-  const [date, setDate] = useState(new Date().toLocaleDateString('en-GB'));
+
+  const [savedDraft] = useState(loadPurchaseDraft); // read once, on mount only
+  const [showDraftBanner, setShowDraftBanner] = useState(() =>
+    !!(savedDraft && (savedDraft.rows?.length || savedDraft.billNo || savedDraft.supplierName))
+  );
+
+  const [billNo, setBillNo] = useState(savedDraft?.billNo || '');
+  const [supplierName, setSupplierName] = useState(savedDraft?.supplierName || '');
+  const [chalanNo, setChalanNo] = useState(savedDraft?.chalanNo || '');
+  const [date, setDate] = useState(savedDraft?.date || new Date().toLocaleDateString('en-GB'));
 
   // Same fix as Sale Invoice: suggestions used to be only the hardcoded
   // PURCHASE_PARTIES array, so a supplier already billed before still never
@@ -65,10 +81,23 @@ const PurchaseInvoice = () => {
     });
     return Array.from(set);
   }, [bills]);
-  const [form, setForm] = useState(emptyForm);
-  const [rows, setRows] = useState([]);
+  const [form, setForm] = useState(savedDraft?.form || emptyForm);
+  const [rows, setRows] = useState(savedDraft?.rows || []);
   const [msg, setMsg] = useState({ text: '', ok: true });
   const [saving, setSaving] = useState(false);
+
+  // Mirror the in-progress bill to localStorage on every meaningful change,
+  // so navigating to Production/Jambo/etc. and coming back restores it.
+  useEffect(() => {
+    const draft = { billNo, supplierName, chalanNo, date, form, rows };
+    try { localStorage.setItem(PURCHASE_DRAFT_KEY, JSON.stringify(draft)); } catch { /* storage full/unavailable — draft just won't persist */ }
+  }, [billNo, supplierName, chalanNo, date, form, rows]);
+
+  const discardDraft = () => {
+    try { localStorage.removeItem(PURCHASE_DRAFT_KEY); } catch {}
+    setBillNo(''); setSupplierName(''); setChalanNo(''); setDate(new Date().toLocaleDateString('en-GB'));
+    setForm(emptyForm); setRows([]); setShowDraftBanner(false);
+  };
 
   const addItem = () => {
     const qty = parseFloat(form.qty);
@@ -128,6 +157,7 @@ const PurchaseInvoice = () => {
         bill_id: savedBill.id,
       });
 
+      try { localStorage.removeItem(PURCHASE_DRAFT_KEY); } catch {}
       setRows([]); setBillNo(''); setSupplierName('');
       setMsg({ text: '✅ Purchase Saved!', ok: true });
     } catch (err) { setMsg({ text: '❌ Error: ' + err.message, ok: false }); }
@@ -145,6 +175,16 @@ const PurchaseInvoice = () => {
       </div>
 
       {msg.text && <div className={`p-4 rounded-xl mb-6 font-bold ${msg.ok ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>{msg.text}</div>}
+
+      {showDraftBanner && (
+        <div className="p-4 rounded-xl mb-6 font-bold bg-yellow-500/10 text-yellow-300 flex flex-wrap items-center justify-between gap-3">
+          <span>📝 Aapka pichla adhura bill wapis load ho gaya hai.</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowDraftBanner(false)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs uppercase tracking-wide">Keep it</button>
+            <button onClick={discardDraft} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs uppercase tracking-wide"><RotateCcw size={12}/> Discard Draft</button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white/5 p-8 rounded-3xl grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <input list="s-list" value={supplierName} onChange={e=>setSupplierName(e.target.value)} placeholder="Supplier Name" className="bg-black/40 p-4 rounded-xl border border-white/10 outline-none focus:border-emerald-500" />
