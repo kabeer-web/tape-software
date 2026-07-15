@@ -2,7 +2,7 @@ import { useState, useContext, useEffect, useMemo } from 'react';
 import { StockContext, displayRoll, rollMatches } from './StockContext';
 import {
   getInventoryByRoll, getProductions,
-  addProduction, updateProduction, deleteProduction
+  addProduction, updateProduction, deleteProduction, logActivity
 } from '../../api';
 // ICONS IMPORT
 import {
@@ -155,6 +155,12 @@ const handleSearch = async () => {
 
       const saved = await addProduction(record);
       setProductions(prev => [saved, ...prev]);
+      logActivity({
+        action: 'add',
+        entity: 'Production',
+        category: record.jambo_type,
+        label: `Production logged — Roll #${displayRoll(record.roll_no)} (${record.jambo_type}), ${record.core_qty_used} ${record.core_brand} core, ${record.yards_used} yards used`,
+      });
       flash(`✅ Success: Recorded ${totalYards} yds from Roll #${displayRoll(record.roll_no)}`);
       setForm(emptyForm); clearRoll(); setTab('history');
     } catch (err) { 
@@ -174,6 +180,12 @@ const handleSearch = async () => {
     try {
       await deleteProduction(p._id);
       setProductions(prev => prev.filter(x => x._id !== p._id));
+      logActivity({
+        action: 'delete',
+        entity: 'Production',
+        category: p.jambo_type,
+        label: `Production entry deleted — Roll #${displayRoll(p.roll_no)} (${p.jambo_type}), ${p.core_qty_used} ${p.core_brand} core`,
+      });
       flash('✅ Record deleted');
     } catch (err) { flash('❌ Delete error: ' + err.message, false); }
   };
@@ -218,6 +230,12 @@ const handleSearch = async () => {
         yards_used: yardsUsed,
       });
       setProductions(prev => prev.map(x => x._id === p._id ? updated : x));
+      logActivity({
+        action: 'edit',
+        entity: 'Production',
+        category: p.jambo_type,
+        label: `Production entry edited — Roll #${displayRoll(updated.roll_no)} (${p.jambo_type})`,
+      });
       flash('✅ Log entry updated');
       cancelRowEdit();
     } catch (err) {

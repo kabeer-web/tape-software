@@ -1,7 +1,8 @@
 import { createContext, useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import { 
   getBills, addBill, updateBill, deleteBill, 
-  getLedgerEntries, addLedgerEntry, updateLedgerEntry, deleteLedgerEntry 
+  getLedgerEntries, addLedgerEntry, updateLedgerEntry, deleteLedgerEntry,
+  logActivity
 } from '../../../api';
 
 export const AccountsContext = createContext({
@@ -49,18 +50,45 @@ export const AccountsProvider = ({ children }) => {
   const handleSaveBill = async (billData) => {
     const saved = await addBill(billData);
     setBills(prev => [saved, ...prev]);
+    logActivity({
+      action: 'add',
+      entity: 'Bill',
+      category: billData.billType,
+      label: `${billData.billType} bill #${billData.billNo || saved.id} saved — ${billData.partyName}`,
+      partyName: billData.partyName,
+      amount: billData.grandTotal,
+    });
     return saved;
   };
 
   const handleUpdateBill = async (id, updates) => {
     const updated = await updateBill(id, updates);
     setBills(prev => prev.map(b => (b._id === id || b.id === id) ? updated : b));
+    logActivity({
+      action: 'edit',
+      entity: 'Bill',
+      category: updated.billType,
+      label: `${updated.billType} bill #${updated.billNo || updated._id} edited — ${updated.partyName}`,
+      partyName: updated.partyName,
+      amount: updated.grandTotal,
+    });
     return updated;
   };
 
   const handleDeleteBill = async (id) => {
+    const bill = bills.find(b => b._id === id || b.id === id);
     await deleteBill(id);
     setBills(prev => prev.filter(b => b._id !== id && b.id !== id));
+    if (bill) {
+      logActivity({
+        action: 'delete',
+        entity: 'Bill',
+        category: bill.billType,
+        label: `${bill.billType} bill #${bill.billNo || bill._id} deleted — ${bill.partyName}`,
+        partyName: bill.partyName,
+        amount: bill.grandTotal,
+      });
+    }
   };
 
   const getLedgerEntryForBill = (billId) => ledger.find(e => e.bill_id === billId);

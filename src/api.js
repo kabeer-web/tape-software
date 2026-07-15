@@ -195,3 +195,51 @@ export const deleteProduction = async (id) => {
   if (error) throw new Error(error.message);
   return true;
 };
+
+// ─── ACTIVITY LOG API (History page) ──────────────────────
+// Backs the History page (src/Components/Analytics.jsx — filename kept as
+// Analytics on purpose, only the sidebar label + in-page heading changed to
+// "History"). Needs a Supabase table called `activity_log` — see the SQL
+// migration handed over alongside this file; run it once in the Supabase
+// SQL editor before this will work.
+export const getActivityLog = async () => {
+  const { data, error } = await supabase.from('activity_log').select('*').order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+// Fire-and-forget on purpose: recording history should never be able to
+// break the actual action it's describing (adding a roll, saving a bill...).
+// If the insert fails — e.g. the migration hasn't been run yet — this logs
+// to console and swallows the error instead of throwing.
+export const logActivity = async (entry) => {
+  try {
+    const payload = {
+      action: entry.action,           // 'add' | 'edit' | 'delete'
+      entity: entry.entity,           // 'Jambo' | 'Core' | 'Carton' | 'Production' | 'Bill'
+      category: entry.category || null,
+      label: entry.label,
+      detail: entry.detail || null,
+      party_name: entry.partyName || null,
+      amount: entry.amount ?? null,
+    };
+    const { error } = await supabase.from('activity_log').insert([payload]);
+    if (error) console.error('logActivity failed (History entry not saved):', error.message);
+  } catch (e) {
+    console.error('logActivity failed (History entry not saved):', e);
+  }
+};
+
+// The "editable" part of History — lets you correct/annotate a past entry's
+// note without touching what actually happened.
+export const updateActivityLogNote = async (id, note) => {
+  const { data, error } = await supabase.from('activity_log').update({ note }).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const deleteActivityLog = async (id) => {
+  const { error } = await supabase.from('activity_log').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};

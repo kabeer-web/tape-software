@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
   LayoutDashboard, Package, Receipt, Settings,
-  BarChart3, ChevronDown, ChevronRight, Search,
-  Users, X, FileText, BookOpen, LogOut,Factory
+  ChevronDown, ChevronRight, Search,
+  Users, X, FileText, BookOpen, LogOut, Factory, History
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
@@ -219,10 +219,10 @@ const Sidebar = ({ onClose = () => {} }) => {
           )}
         </div>
 
-        {/* Analytics */}
+        {/* History (was Analytics — dead link before, now a real page) */}
         <div className="mt-1">
           <NavLink to="/analytics" onClick={handleNavClick} className={navLinkClass}>
-            <BarChart3 size={18} /> Analytics
+            <History size={18} /> History
           </NavLink>
         </div>
 

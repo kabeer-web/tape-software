@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './Components/AuthContext';
 
 import Sidebar from './Components/Sidebar';
 import Dashboard from './Components/Dashboard';
+import Analytics from './Components/Analytics';
 import MasterSearch from './Components/MasterSearch';
 import Login from './Components/Login';
 import Production from './Components/inventory/Production';
@@ -108,6 +109,7 @@ const AppLayout = () => {
             <Route path="/accounts/ledger" element={<Ledger />} />
             <Route path="/accounts/bills" element={<SavedBills />} />
             <Route path="/production" element={<Production />} />
+            <Route path="/analytics" element={<Analytics />} />
             <Route path="*" element={
               <div className="flex items-center justify-center h-[60vh]">
                 <div className="text-center">

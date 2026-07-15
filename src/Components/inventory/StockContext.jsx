@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useContext, useRef } from 'react';
-import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory } from '../../api';
+import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory, logActivity } from '../../api';
 
 // Display/search helpers — exported here (not a separate file) since every
 // place that needs them already imports from StockContext anyway.
@@ -110,6 +110,14 @@ export const StockProvider = ({ children }) => {
         const payload = buildPayload(currentInv);
         const saved = await addInventory(payload);
         setInventory(prev => [saved, ...prev]); // updates state AND inventoryRef synchronously
+        logActivity({
+          action: 'add',
+          entity: isJambo ? 'Jambo' : (category === 'Core' ? 'Core' : category === 'Carton' ? 'Carton' : category),
+          category,
+          label: isJambo
+            ? `Roll #${displayRoll(saved.roll_no)} added — ${category}, ${saved.micron}μ, ${saved.width}mm, ${saved.yards} yards`
+            : `${category} added — ${saved.brand || ''} ${saved.qty ?? saved.yards ?? ''}`.trim(),
+        });
         return saved;
       } catch (e) {
         lastErr = e;
@@ -163,6 +171,12 @@ export const StockProvider = ({ children }) => {
     try {
       const updated = await updateInventory(item._id || item.id, { qty: newVal });
       setInventory(prev => prev.map(i => (i._id === id || i.id === id) ? updated : i));
+      logActivity({
+        action: delta > 0 ? 'add' : 'edit',
+        entity: item.category || 'Stock',
+        category: item.category,
+        label: `${item.category || 'Stock'} — ${item.brand || ''} ${delta > 0 ? '+' : ''}${delta} (now ${newVal})`.trim(),
+      });
       return updated;
     } catch (e) { console.error(e); alert("Update failed"); }
   };
@@ -182,9 +196,21 @@ export const StockProvider = ({ children }) => {
 
   // ✅ Remove Item
   const removeItem = async (id) => {
+    const item = inventoryRef.current.find(i => i._id === id || i.id === id);
     try {
       await deleteInventory(id);
       setInventory(prev => prev.filter(i => i._id !== id && i.id !== id));
+      if (item) {
+        const isJambo = JAMBO_CATS.includes(item.category);
+        logActivity({
+          action: 'delete',
+          entity: isJambo ? 'Jambo' : (item.category || 'Stock'),
+          category: item.category,
+          label: isJambo
+            ? `Roll #${displayRoll(item.rollNo || item.roll_no)} deleted — ${item.category}, ${item.micron}μ, ${item.width}mm, ${item.yards} yards`
+            : `${item.category || 'Stock'} deleted — ${item.brand || ''} ${item.qty ?? ''}`.trim(),
+        });
+      }
     } catch (e) { console.error(e); alert("Delete failed"); }
   };
 
@@ -240,6 +266,15 @@ export const StockProvider = ({ children }) => {
     }
     const updated = await updateInventory(item._id || item.id, payload);
     setInventory(prev => prev.map(i => (i._id === id || i.id === id) ? updated : i));
+    const isJambo = JAMBO_CATS.includes(item.category);
+    logActivity({
+      action: 'edit',
+      entity: isJambo ? 'Jambo' : (item.category || 'Stock'),
+      category: item.category,
+      label: isJambo
+        ? `Roll #${displayRoll(updated.roll_no)} edited — ${item.category}`
+        : `${item.category || 'Stock'} edited — ${updated.brand || ''}`.trim(),
+    });
     return updated;
   };
 
