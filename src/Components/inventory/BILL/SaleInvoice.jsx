@@ -414,7 +414,7 @@ const SaleInvoice = () => {
 
       {showDraftBanner && (
         <div className="mb-4 p-3 rounded-xl text-sm font-bold border bg-yellow-500/10 border-yellow-500/40 text-yellow-300 flex flex-wrap items-center justify-between gap-3">
-          <span>📝 Aapka pichla adhura bill wapis load ho gaya hai.</span>
+          <span>📝 YOUR BILL IS PENDING .</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowDraftBanner(false)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs uppercase tracking-wide">Keep it</button>
             <button onClick={discardDraft} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs uppercase tracking-wide"><RotateCcw size={12}/> Discard Draft</button>
