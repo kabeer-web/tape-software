@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getActivityLog, updateActivityLogNote, deleteActivityLog } from '../api';
+import { supabase } from '../supabase';
 import {
   History, Search, Trash2, Pencil, Check, X,
   RefreshCcw, Package, Layers, Receipt, Factory, Box
@@ -50,6 +51,30 @@ const Analytics = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  // ── Real-time ─────────────────────────────────────────────
+  // Every add/edit/delete anywhere in the app (Jambo, Core, Carton,
+  // Production, Bills) inserts a row into `activity_log` the moment it
+  // happens. This subscribes to that table directly, so the list here
+  // updates itself live — no refresh needed, even if the action happened
+  // on another tab/device.
+  useEffect(() => {
+    const channel = supabase
+      .channel('activity_log_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_log' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const row = { ...payload.new, _id: payload.new.id };
+          setLogs(prev => prev.some(l => l._id === row._id) ? prev : [row, ...prev]);
+        } else if (payload.eventType === 'UPDATE') {
+          const row = { ...payload.new, _id: payload.new.id };
+          setLogs(prev => prev.map(l => l._id === row._id ? row : l));
+        } else if (payload.eventType === 'DELETE') {
+          setLogs(prev => prev.filter(l => l._id !== payload.old.id));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const entities = ['All', 'Jambo', 'Core', 'Carton', 'Production', 'Bill'];
   const actions  = ['All', 'add', 'edit', 'delete'];
@@ -109,7 +134,12 @@ const Analytics = () => {
           <h1 className="text-4xl font-black italic tracking-tighter"><History className="inline text-[#22c55e] mr-2 -mt-2" size={32}/> HS <span className="text-[#22c55e]">HISTORY</span></h1>
           <p className="text-gray-500 text-xs mt-1">Har add / edit / delete ka record — Jambo, Core, Carton, Production, Bills.</p>
         </div>
-        <button onClick={load} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold transition"><RefreshCcw size={14}/> Refresh</button>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-[#22c55e]">
+            <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse"></span> Live
+          </span>
+          <button onClick={load} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-bold transition"><RefreshCcw size={14}/> Refresh</button>
+        </div>
       </div>
 
       {loadErr && (
