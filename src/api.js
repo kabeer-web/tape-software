@@ -238,6 +238,15 @@ export const updateActivityLogNote = async (id, note) => {
   return mapId(data);
 };
 
+// Full-row edit — same idea as updateActivityLogNote but for any/all fields
+// (label, category, party_name, amount, note), for when a note-only fix
+// isn't enough and the recorded details themselves need correcting.
+export const updateActivityLog = async (id, updates) => {
+  const { data, error } = await supabase.from('activity_log').update(updates).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
 export const deleteActivityLog = async (id) => {
   const { error } = await supabase.from('activity_log').delete().eq('id', id);
   if (error) throw new Error(error.message);
