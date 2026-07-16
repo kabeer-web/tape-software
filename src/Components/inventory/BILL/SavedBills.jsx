@@ -3,7 +3,7 @@ import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext } from '../StockContext';
 import {
   FileText, Pencil, Trash2, Check, X,
-  Plus, Search, Printer
+  Plus, Search, Printer, Users, ChevronDown
 } from 'lucide-react';
 
 // ── Number to words ───────────────────────────────────────
@@ -182,6 +182,27 @@ const SavedBills = () => {
       String(b.billNo || '').includes(search))
   );
 
+  // ── Group by party ─────────────────────────────────────
+  // So Sale and Purchase bills for the same party sit together, clearly
+  // labeled, instead of one long chronological list mixing every party and
+  // bill type together.
+  const [collapsedParties, setCollapsedParties] = useState(new Set());
+  const toggleParty = (party) => setCollapsedParties(prev => {
+    const next = new Set(prev);
+    if (next.has(party)) next.delete(party); else next.add(party);
+    return next;
+  });
+
+  const groupedByParty = (() => {
+    const map = new Map();
+    filtered.forEach(b => {
+      const party = b.partyName || 'Unknown';
+      if (!map.has(party)) map.set(party, []);
+      map.get(party).push(b);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  })();
+
   // ── Edit helpers ──────────────────────────────────────
   const startEdit = (bill) => {
     setEditId(bill._id || bill.id);
@@ -343,77 +364,11 @@ const SavedBills = () => {
 
   const getBillKey = (b) => b._id || b.id;
 
-  // ── Render ─────────────────────────────────────────────
-  return (
-    <div className="text-white min-h-screen">
-
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <FileText className="text-[#22c55e]" size={24}/>
-        <div>
-          <h1 className="text-2xl font-black">SAVED <span className="text-[#22c55e]">BILLS</span></h1>
-          <p className="text-gray-500 text-xs mt-0.5">Sab bills ek jagah</p>
-        </div>
-      </div>
-
-      {actionErr && (
-        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-bold">
-          {actionErr}
-        </div>
-      )}
-
-      {/* Search + Filter */}
-      <div className="flex flex-wrap gap-3 mb-5">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={15}/>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Party name ya bill # se search..."
-            className="w-full pl-9 p-2.5 bg-white/[0.03] rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]/40 text-sm"
-          />
-        </div>
-        <div className="flex gap-2">
-          {['All','Sale','Purchase'].map(t => (
-            <button key={t} onClick={() => setFilterType(t)}
-              className={`px-4 py-2.5 rounded-xl font-bold text-sm border transition ${
-                filterType === t
-                  ? 'bg-[#22c55e] text-black border-[#22c55e]'
-                  : 'bg-white/[0.03] text-gray-400 border-[#22c55e]/20 hover:border-[#22c55e]/50'
-              }`}>
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Summary cards */}
-      {bills.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-          {[
-            { label:'Total Bills',    value: bills.length },
-            { label:'Sale Bills',     value: bills.filter(b=>b.billType==='Sale').length },
-            { label:'Purchase Bills', value: bills.filter(b=>b.billType==='Purchase').length },
-            { label:'Sale Revenue',   value: bills.filter(b=>b.billType==='Sale').reduce((s,b)=>s+(b.grandTotal||0),0).toLocaleString() },
-          ].map(({ label, value }) => (
-            <div key={label} className="bg-white/[0.03] border border-[#22c55e]/10 rounded-2xl p-4">
-              <p className="text-[10px] text-gray-500 uppercase font-bold">{label}</p>
-              <p className="text-xl font-black text-[#22c55e] mt-1">{value}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Bills list */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <FileText size={40} className="mx-auto mb-3 opacity-20"/>
-          <p>Koi bill nahi mila.</p>
-          <p className="text-xs mt-1 text-gray-600">Sale ya Purchase invoice bana kar Save Bill dabao.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filtered.map(bill => {
+  // Extracted so the exact same bill card can be reused under both the
+  // "Sale Bills" and "Purchase Bills" sub-sections of each party group
+  // below, instead of duplicating this ~300-line block. Nothing about
+  // what it renders or how editing/delete/print work has changed.
+  const renderBillCard = (bill) => {
             const key       = getBillKey(bill);
             const isEditing = editId === key;
             const curItems  = isEditing ? editData.items : (bill.items || []);
@@ -713,6 +668,127 @@ const SavedBills = () => {
                   <p className="font-black text-[#22c55e]">{curTotal.toLocaleString()}</p>
                 </div>
 
+              </div>
+            );
+  };
+
+  // ── Render ─────────────────────────────────────────────
+  return (
+    <div className="text-white min-h-screen">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <FileText className="text-[#22c55e]" size={24}/>
+        <div>
+          <h1 className="text-2xl font-black">SAVED <span className="text-[#22c55e]">BILLS</span></h1>
+          <p className="text-gray-500 text-xs mt-0.5">Sab bills ek jagah</p>
+        </div>
+      </div>
+
+      {actionErr && (
+        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-bold">
+          {actionErr}
+        </div>
+      )}
+
+      {/* Search + Filter */}
+      <div className="flex flex-wrap gap-3 mb-5">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={15}/>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Party name ya bill # se search..."
+            className="w-full pl-9 p-2.5 bg-white/[0.03] rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]/40 text-sm"
+          />
+        </div>
+        <div className="flex gap-2">
+          {['All','Sale','Purchase'].map(t => (
+            <button key={t} onClick={() => setFilterType(t)}
+              className={`px-4 py-2.5 rounded-xl font-bold text-sm border transition ${
+                filterType === t
+                  ? 'bg-[#22c55e] text-black border-[#22c55e]'
+                  : 'bg-white/[0.03] text-gray-400 border-[#22c55e]/20 hover:border-[#22c55e]/50'
+              }`}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      {bills.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          {[
+            { label:'Total Bills',    value: bills.length },
+            { label:'Sale Bills',     value: bills.filter(b=>b.billType==='Sale').length },
+            { label:'Purchase Bills', value: bills.filter(b=>b.billType==='Purchase').length },
+            { label:'Sale Revenue',   value: bills.filter(b=>b.billType==='Sale').reduce((s,b)=>s+(b.grandTotal||0),0).toLocaleString() },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-white/[0.03] border border-[#22c55e]/10 rounded-2xl p-4">
+              <p className="text-[10px] text-gray-500 uppercase font-bold">{label}</p>
+              <p className="text-xl font-black text-[#22c55e] mt-1">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bills list — grouped by party, so each party's Sale and Purchase
+          bills sit together and clearly labeled instead of one long mixed
+          chronological list. The "All/Sale/Purchase" filter above still
+          works — it narrows which sub-section(s) show inside each party. */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-16 text-gray-500">
+          <FileText size={40} className="mx-auto mb-3 opacity-20"/>
+          <p>Koi bill nahi mila.</p>
+          <p className="text-xs mt-1 text-gray-600">Sale ya Purchase invoice bana kar Save Bill dabao.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groupedByParty.map(([party, partyBills]) => {
+            const saleBills     = partyBills.filter(b => b.billType === 'Sale');
+            const purchaseBills = partyBills.filter(b => b.billType === 'Purchase');
+            const saleTotal     = saleBills.reduce((s,b)=>s+(b.grandTotal||0),0);
+            const purchaseTotal = purchaseBills.reduce((s,b)=>s+(b.grandTotal||0),0);
+            const isOpen        = !collapsedParties.has(party);
+
+            return (
+              <div key={party} className="bg-white/[0.02] border border-white/10 rounded-[1.75rem] overflow-hidden">
+                <button
+                  onClick={() => toggleParty(party)}
+                  className="w-full flex flex-wrap items-center justify-between gap-3 p-4 hover:bg-white/[0.03] transition text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <ChevronDown size={16} className={`text-gray-500 transition-transform ${isOpen ? '' : '-rotate-90'}`}/>
+                    <Users size={16} className="text-[#22c55e]"/>
+                    <span className="font-black text-sm">{party}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase">
+                    {saleBills.length > 0 && (
+                      <span className="px-2.5 py-1 rounded-full bg-[#22c55e]/10 text-[#22c55e]">{saleBills.length} Sale • Rs.{saleTotal.toLocaleString()}</span>
+                    )}
+                    {purchaseBills.length > 0 && (
+                      <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400">{purchaseBills.length} Purchase • Rs.{purchaseTotal.toLocaleString()}</span>
+                    )}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="p-4 pt-0 space-y-5">
+                    {saleBills.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-black text-[#22c55e] uppercase tracking-widest mb-2 pl-1">Sale Bills</p>
+                        <div className="space-y-3">{saleBills.map(renderBillCard)}</div>
+                      </div>
+                    )}
+                    {purchaseBills.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 pl-1">Purchase Bills</p>
+                        <div className="space-y-3">{purchaseBills.map(renderBillCard)}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
