@@ -15,12 +15,12 @@ const SALE_PARTIES = [
   'AR PACKAGES','ROSHAN TRADER','HUZAIFA TRADER','SHAMS STATIONARY',
   'ABDUL RAUF','HAMZULLAH','ANEES STATIONARY','A ONE','ZEESHAN HYD',
   'ABDUL BASIT','MD TRADERS','MUNEER BHAI','ANWAR BHAI','FAROOQ BHAI',
-  'GR TRADER','HAMZA SIALKOT','HASHMI TRADER',
-  'NAQI TAQI','MEMON ELECTRIC','MOK','PAKISTAN TRADER','SABIR BROTHER 1',
-  'SABIR BROTHER 2','SHERAZ HABIB','SANAULLAH TEXTILE',
-  'USAMA STATIONARY','WAHEED WALI','AL FAREED',
-  'SHOKAT Sb',' HAYAT GUL SHAKIR', 'AMIR AJ',' ARSALAN HAS','GR TRADER',
-  'UMAIR FISHERY','AMEER AKBAR','ISMAIL BHAI',
+  'GR TRADER','HAMZA SIALKOT','HASHMI TRADER','GAIN TEX INTERNATIONAL',
+  'NAQI TAQI','MEMON ELECTRIC','MOK PAKISTAN TRADER','SABIR BROTHER 1',
+  'SABIR BROTHER 2','SHERAZ HABIB','SANAULLAH TEXTILE','SUJJAD ALI',
+  'USAMA STATIONARY','ZEESHAN HAIDRABAD','WAHEED WALI','AL FAREED',
+  'SHOKAT HAYAT','GUL AMIR','AJ ARSALAN','HAS GR TRADER','MUDASIR MEMON',
+  'UMAIR FISHERY','AMEER AKBAR','ISMAIL BHAI','BILAL BHAI',
   'FARHAN NEW KARACHI','N.K ENTERPRISES',
 ];
 
@@ -610,13 +610,13 @@ export default function Ledger() {
                             {isEd ? <input value={editData.description} onChange={e=>setEditData(d=>({...d,description:e.target.value}))} className="bg-black/30 p-1 rounded w-full text-xs"/> : <span className="text-xs text-gray-300">{entry.description}</span>}
                           </td>
                           <td className="p-3 text-right">
-                            {entry.entry_type === 'debit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-red-400 font-bold">{entry.amount.toLocaleString()}</span>) : '-'}
+                            {entry.entry_type === 'debit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-red-400 font-bold">{(entry.amount || 0).toLocaleString()}</span>) : '-'}
                           </td>
                           <td className="p-3 text-right">
-                            {entry.entry_type === 'credit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-emerald-400 font-bold">{entry.amount.toLocaleString()}</span>) : '-'}
+                            {entry.entry_type === 'credit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-emerald-400 font-bold">{(entry.amount || 0).toLocaleString()}</span>) : '-'}
                           </td>
                           <td className="p-3 text-right font-black text-orange-400">
-                            {entry.runningBalance.toLocaleString()}
+                            {(entry.runningBalance || 0).toLocaleString()}
                           </td>
                           <td className="p-3">
                             <div className="flex gap-1">
