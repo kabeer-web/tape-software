@@ -101,6 +101,18 @@ const handleSearch = async () => {
     ) || null;
   }, [inventory, form]);
 
+  // Live lookups used by edit/delete stock-reconciliation below. Deliberately
+  // NOT using a production record's frozen roll_snapshot/core_snapshot —
+  // those are a photo of the roll/core taken the moment production was
+  // created, and adjusting stock against that stale copy is exactly what
+  // caused the old "double plus" bug (it overwrote the roll's CURRENT value
+  // with stale-value + delta instead of current-value + delta). These two
+  // always read the live `inventory` array instead.
+  const findLiveRoll = (rollNo, category) =>
+    inventory.find(i => (i.category === category || i.type === category) && displayRoll(i.rollNo || i.roll_no) === displayRoll(rollNo)) || null;
+  const findLiveCore = (brand, side, ply) =>
+    inventory.find(i => i.category === 'Core' && i.brand === brand && sideMatch(i.side, side) && String(i.ply) === String(ply)) || null;
+
   // Logs tab: search by Jambo roll #, then group all entries for the same
   // roll together (instead of pure created_at order) — e.g. Roll #1 today,
   // then #2/#3/#4, then another #1 entry later: all #1 entries now sit next
@@ -170,23 +182,30 @@ const handleSearch = async () => {
     finally { setSaving(false); }
   };
 
-  // Deleting a log entry ONLY removes the log — it does NOT push yards/core
-  // qty back into the Jambo/Core stock. (Previously it did, which meant
-  // deleting a mistaken entry silently re-inflated stock that may have
-  // already moved on elsewhere — confusing and not wanted.) If stock genuinely
-  // needs correcting, do that directly on the Jambo/Core page.
+  // Deleting a log entry now properly undoes it — the yards/core qty it used
+  // get added back, like an undo. This looks up the roll/core LIVE (by roll #
+  // / brand+side+ply) instead of using the frozen snapshot taken when the
+  // production was created, so it adds back onto whatever the item's CURRENT
+  // value is — that's what avoids the old double-counting bug.
   const handleDelete = async (p) => {
-    if (!window.confirm('Delete this production log entry? (Stock will NOT be restored — edit it directly on the Jambo page if needed.)')) return;
+    if (!window.confirm('Delete this production log entry? Stock will be restored (undo).')) return;
     try {
+      const liveRoll = findLiveRoll(p.roll_no, p.jambo_type);
+      const liveCore = findLiveCore(p.core_brand, p.core_side, p.core_ply);
+      if (liveRoll) await adjustStock(liveRoll, 'yards', Number(p.yards_used || 0));
+      else console.warn(`Undo: Roll #${displayRoll(p.roll_no)} (${p.jambo_type}) not found in current stock — yards not restored.`);
+      if (liveCore) await adjustStock(liveCore, 'qty', Number(p.core_qty_used || 0));
+      else console.warn(`Undo: ${p.core_brand} ${p.core_side} ${p.core_ply}Ply core not found in current stock — qty not restored.`);
+
       await deleteProduction(p._id);
       setProductions(prev => prev.filter(x => x._id !== p._id));
       logActivity({
         action: 'delete',
         entity: 'Production',
         category: p.jambo_type,
-        label: `Production entry deleted — Roll #${displayRoll(p.roll_no)} (${p.jambo_type}), ${p.core_qty_used} ${p.core_brand} core`,
+        label: `Production entry deleted (undone) — Roll #${displayRoll(p.roll_no)} (${p.jambo_type}), ${p.core_qty_used} ${p.core_brand} core`,
       });
-      flash('✅ Record deleted');
+      flash('✅ Record deleted — stock restored');
     } catch (err) { flash('❌ Delete error: ' + err.message, false); }
   };
 
@@ -219,6 +238,38 @@ const handleSearch = async () => {
     const yardsUsedTyped = parseFloat(editRow.yards_used);
     const yardsUsed = !isNaN(yardsUsedTyped) ? yardsUsedTyped : parseFloat((coreQtyUsed * yardsPerCore).toFixed(2));
     try {
+      // ── Reconcile stock ─────────────────────────────────
+      // Same roll/core → one NET delta (old − new) applied once. Different
+      // roll/core → restore the full old amount to the OLD item and deduct
+      // the full new amount from the NEW item (two separate DB rows, so no
+      // risk of one call clobbering the other's fresh value).
+      // We deliberately don't apply "restore old" then "deduct new" as two
+      // separate calls on the SAME item — the second call would read a
+      // stale pre-restore value and overwrite the first call's result.
+      const rollSame = displayRoll(p.roll_no) === displayRoll(editRow.roll_no);
+      if (rollSame) {
+        const roll = findLiveRoll(p.roll_no, p.jambo_type);
+        if (roll) await adjustStock(roll, 'yards', Number(p.yards_used || 0) - yardsUsed);
+        else console.warn(`Edit: Roll #${displayRoll(p.roll_no)} not found in current stock — yards not adjusted.`);
+      } else {
+        const oldRoll = findLiveRoll(p.roll_no, p.jambo_type);
+        if (oldRoll) await adjustStock(oldRoll, 'yards', Number(p.yards_used || 0));
+        const newRoll = findLiveRoll(editRow.roll_no, p.jambo_type);
+        if (newRoll) await adjustStock(newRoll, 'yards', -yardsUsed);
+      }
+
+      const coreSame = p.core_brand === editRow.core_brand && p.core_side === editRow.core_side && p.core_ply === editRow.core_ply;
+      if (coreSame) {
+        const core = findLiveCore(p.core_brand, p.core_side, p.core_ply);
+        if (core) await adjustStock(core, 'qty', Number(p.core_qty_used || 0) - coreQtyUsed);
+        else console.warn(`Edit: ${p.core_brand} ${p.core_side} ${p.core_ply}Ply core not found in current stock — qty not adjusted.`);
+      } else {
+        const oldCore = findLiveCore(p.core_brand, p.core_side, p.core_ply);
+        if (oldCore) await adjustStock(oldCore, 'qty', Number(p.core_qty_used || 0));
+        const newCore = findLiveCore(editRow.core_brand, editRow.core_side, editRow.core_ply);
+        if (newCore) await adjustStock(newCore, 'qty', -coreQtyUsed);
+      }
+
       const updated = await updateProduction(p._id, {
         date: editRow.date,
         roll_no: editRow.roll_no,
@@ -234,9 +285,9 @@ const handleSearch = async () => {
         action: 'edit',
         entity: 'Production',
         category: p.jambo_type,
-        label: `Production entry edited — Roll #${displayRoll(updated.roll_no)} (${p.jambo_type})`,
+        label: `Production entry edited — Roll #${displayRoll(updated.roll_no)} (${p.jambo_type}), stock adjusted`,
       });
-      flash('✅ Log entry updated');
+      flash('✅ Log entry updated — stock adjusted');
       cancelRowEdit();
     } catch (err) {
       flash('❌ Update error: ' + err.message, false);
