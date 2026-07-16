@@ -7,7 +7,7 @@ const TITLE = 'CLOTH TAPE';
 const LOW = 50;
 const MICRONS = [37, 39, 40, 42, 48];
 const WIDTHS = ['1280'];
-const COLORS = ['Silver', 'Green', 'Blue', 'Red', 'Yellow'];
+const COLORS = ['Silver', 'Green', 'Blue', 'Red', 'Yellow','Black'];
 
 export default function Cloth() {
   const { inventory, addRoll, removeItem, issueYards, editItem, loading } = useContext(StockContext);
