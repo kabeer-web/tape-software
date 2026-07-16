@@ -5,7 +5,7 @@ import {
   Plus, Trash2, Archive, RotateCcw
 } from 'lucide-react';
 
-const PURCHASE_PARTIES = ['UNIVERSAL COTTING','KOSHER','CHAWLA INDUSTRY','IBAD CORE','TAHSEEN CARTON','TALHA WASEEM','ASGHR CORE','DEER TAPE','SAMAD BHAI'];
+const PURCHASE_PARTIES = ['UNIVERSAL COTTING','KOSHER','CHAWLA INDUSTRY','IBAD CORE','TAHSEEN CARTON','TALHA WASEEM','ASGHR CORE','DEER TAPE','SAMAD BHAI','SEEMA PACKAGES',];
 const JAMBO_CATEGORIES = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam','Lemon'];
 const CARTON_SIZES = ['10', '10.5', '11', '12'];
 const PLY_OPTIONS = ['5', '6', '8', '10'];
