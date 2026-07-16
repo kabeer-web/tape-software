@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getActivityLog, updateActivityLogNote, deleteActivityLog } from '../api';
+import { getActivityLog, updateActivityLogNote, updateActivityLog, deleteActivityLog } from '../api';
 import { supabase } from '../supabase';
 import {
   History, Search, Trash2, Pencil, Check, X,
@@ -34,7 +34,7 @@ const Analytics = () => {
   const [actionFilter, setActionFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All'); // 'All' | 'Today' | 'Week' | 'Month'
   const [editId, setEditId]   = useState(null);
-  const [noteDraft, setNoteDraft] = useState('');
+  const [editForm, setEditForm] = useState({ label: '', category: '', party_name: '', amount: '', note: '' });
 
   const load = async () => {
     setLoading(true);
@@ -109,14 +109,30 @@ const Analytics = () => {
   const editCount    = logs.filter(l => l.action === 'edit').length;
   const deleteCount  = logs.filter(l => l.action === 'delete').length;
 
-  const startEditNote = (l) => { setEditId(l._id); setNoteDraft(l.note || ''); };
-  const cancelEditNote = () => { setEditId(null); setNoteDraft(''); };
+  const startEditNote = (l) => {
+    setEditId(l._id);
+    setEditForm({
+      label: l.label || '',
+      category: l.category || '',
+      party_name: l.party_name || '',
+      amount: l.amount != null ? String(l.amount) : '',
+      note: l.note || '',
+    });
+  };
+  const cancelEditNote = () => { setEditId(null); setEditForm({ label: '', category: '', party_name: '', amount: '', note: '' }); };
   const saveNote = async (l) => {
     try {
-      const updated = await updateActivityLogNote(l._id, noteDraft.trim());
+      const amt = editForm.amount.trim();
+      const updated = await updateActivityLog(l._id, {
+        label: editForm.label.trim() || l.label,
+        category: editForm.category.trim() || null,
+        party_name: editForm.party_name.trim() || null,
+        amount: amt === '' ? null : (parseFloat(amt) || 0),
+        note: editForm.note.trim() || null,
+      });
       setLogs(prev => prev.map(x => x._id === l._id ? updated : x));
       cancelEditNote();
-    } catch (e) { alert('Note save failed: ' + e.message); }
+    } catch (e) { alert('Update failed: ' + e.message); }
   };
 
   const handleDeleteLog = async (l) => {
@@ -207,25 +223,40 @@ const Analytics = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-0.5">
                       <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${ACTION_COLOR[l.action] || 'bg-white/10 text-gray-400'}`}>{ACTION_LABEL[l.action] || l.action}</span>
-                      <span className="text-[10px] font-bold text-gray-500 uppercase">{l.entity}{l.category ? ` • ${l.category}` : ''}</span>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase">{l.entity}</span>
                       <span className="text-[10px] text-gray-600">{timeAgo(l.created_at)}</span>
                     </div>
-                    <p className="text-sm font-bold text-white">{l.label}</p>
-                    {l.party_name && <p className="text-xs text-gray-500 mt-0.5">Party: <span className="text-gray-300 font-bold">{l.party_name}</span>{l.amount != null && <> • Rs. {Number(l.amount).toLocaleString()}</>}</p>}
 
                     {isEditing ? (
-                      <div className="mt-2 flex items-center gap-2">
-                        <input autoFocus value={noteDraft} onChange={e=>setNoteDraft(e.target.value)} placeholder="Add a note..."
-                          className="flex-1 bg-black/30 p-2 rounded-lg border border-[#22c55e]/40 outline-none text-xs" />
-                        <button onClick={() => saveNote(l)} className="text-[#22c55e] p-1.5"><Check size={15}/></button>
-                        <button onClick={cancelEditNote} className="text-gray-500 p-1.5"><X size={15}/></button>
+                      <div className="mt-1 space-y-1.5">
+                        <input value={editForm.label} onChange={e=>setEditForm(f=>({...f, label: e.target.value}))} placeholder="Label / description"
+                          className="w-full bg-black/30 p-2 rounded-lg border border-[#22c55e]/40 outline-none text-xs font-bold text-white" />
+                        <div className="flex flex-wrap gap-1.5">
+                          <input value={editForm.category} onChange={e=>setEditForm(f=>({...f, category: e.target.value}))} placeholder="Category"
+                            className="flex-1 min-w-[100px] bg-black/30 p-2 rounded-lg border border-white/10 outline-none text-xs" />
+                          <input value={editForm.party_name} onChange={e=>setEditForm(f=>({...f, party_name: e.target.value}))} placeholder="Party name"
+                            className="flex-1 min-w-[100px] bg-black/30 p-2 rounded-lg border border-white/10 outline-none text-xs" />
+                          <input type="number" value={editForm.amount} onChange={e=>setEditForm(f=>({...f, amount: e.target.value}))} placeholder="Amount"
+                            className="w-28 bg-black/30 p-2 rounded-lg border border-white/10 outline-none text-xs" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input value={editForm.note} onChange={e=>setEditForm(f=>({...f, note: e.target.value}))} placeholder="Add a note..."
+                            className="flex-1 bg-black/30 p-2 rounded-lg border border-white/10 outline-none text-xs" />
+                          <button onClick={() => saveNote(l)} className="text-[#22c55e] p-1.5"><Check size={15}/></button>
+                          <button onClick={cancelEditNote} className="text-gray-500 p-1.5"><X size={15}/></button>
+                        </div>
                       </div>
-                    ) : l.note ? (
-                      <p className="text-xs text-gray-400 italic mt-1">📝 {l.note}</p>
-                    ) : null}
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-white">{l.label}</p>
+                        {l.category && <p className="text-[10px] text-gray-500 mt-0.5">Category: <span className="text-gray-300 font-bold">{l.category}</span></p>}
+                        {l.party_name && <p className="text-xs text-gray-500 mt-0.5">Party: <span className="text-gray-300 font-bold">{l.party_name}</span>{l.amount != null && <> • Rs. {Number(l.amount).toLocaleString()}</>}</p>}
+                        {l.note && <p className="text-xs text-gray-400 italic mt-1">📝 {l.note}</p>}
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition shrink-0">
-                    {!isEditing && <button onClick={() => startEditNote(l)} className="p-2 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg" title="Add/edit note"><Pencil size={14}/></button>}
+                    {!isEditing && <button onClick={() => startEditNote(l)} className="p-2 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg" title="Edit this entry"><Pencil size={14}/></button>}
                     <button onClick={() => handleDeleteLog(l)} className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg" title="Delete this history entry"><Trash2 size={14}/></button>
                   </div>
                 </div>
