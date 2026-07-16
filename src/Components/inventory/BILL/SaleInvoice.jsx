@@ -414,7 +414,7 @@ const SaleInvoice = () => {
 
       {showDraftBanner && (
         <div className="mb-4 p-3 rounded-xl text-sm font-bold border bg-yellow-500/10 border-yellow-500/40 text-yellow-300 flex flex-wrap items-center justify-between gap-3">
-          <span>📝 YOUR BILL IS PENDING .</span>
+          <span>📝 Aapka pichla adhura bill wapis load ho gaya hai.</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowDraftBanner(false)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs uppercase tracking-wide">Keep it</button>
             <button onClick={discardDraft} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs uppercase tracking-wide"><RotateCcw size={12}/> Discard Draft</button>
@@ -524,7 +524,7 @@ const SaleInvoice = () => {
           <thead className="bg-white/5 text-[10px] uppercase font-black text-slate-500"><tr><th className="p-5">#</th><th>Description</th><th className="text-center">CTN</th><th className="text-center">Total Qty</th><th className="text-right">Rate</th><th className="text-right p-5">Amount</th><th className="p-5"></th></tr></thead>
           <tbody className="divide-y divide-white/5">
             {rows.map((r, i) => (
-              <tr key={r.id} className={`hover:bg-white/5 transition ${editRowId === r.id ? 'bg-yellow-500/10' : ''}`}><td className="p-5 text-gray-500">{i+1}</td><td><p className="font-bold">{r.brand} - {r.colour}</p><p className="text-[10px] text-gray-500 uppercase">{r.sizeLabel}</p></td><td className="text-center font-bold">{r.totalCarton}</td><td className="text-center text-emerald-500 font-bold">{r.totalQty}</td><td className="text-right font-mono text-xs">{r.rate.toLocaleString()}</td><td className="text-right font-black text-white p-5">{r.total.toLocaleString()}</td><td className="p-5"><div className="flex items-center justify-end gap-1"><button onClick={() => startEditRow(r)} className="p-1.5 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition"><Pencil size={14}/></button><button onClick={() => removeRow(r.id)} className="p-1.5 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"><Trash2 size={16}/></button></div></td></tr>
+              <tr key={r.id} className={`hover:bg-white/5 transition ${editRowId === r.id ? 'bg-yellow-500/10' : ''}`}><td className="p-5 text-gray-500">{i+1}</td><td><p className="font-bold">{r.brand} - {r.colour}</p><p className="text-[10px] text-gray-500 uppercase">{r.sizeLabel}</p></td><td className="text-center font-bold">{r.totalCarton}</td><td className="text-center text-emerald-500 font-bold">{r.totalQty}</td><td className="text-right font-mono text-xs">{(r.rate || 0).toLocaleString()}</td><td className="text-right font-black text-white p-5">{(r.total || 0).toLocaleString()}</td><td className="p-5"><div className="flex items-center justify-end gap-1"><button onClick={() => startEditRow(r)} className="p-1.5 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition"><Pencil size={14}/></button><button onClick={() => removeRow(r.id)} className="p-1.5 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"><Trash2 size={16}/></button></div></td></tr>
             ))}
           </tbody>
         </table>
@@ -535,7 +535,7 @@ const SaleInvoice = () => {
         <div className="bg-emerald-500 p-6 rounded-[2rem] flex items-center justify-between shadow-2xl"><div className="text-emerald-950">
           <p className="text-[10px] uppercase font-black tracking-widest opacity-60">Grand Total Payable</p>
           <p className="text-xs font-bold">{totalCartonCount} Cartons Total</p></div>
-          <p className="text-4xl font-black text-emerald-950 tracking-tighter">Rs. {grandTotal.toLocaleString()}</p></div>
+          <p className="text-4xl font-black text-emerald-950 tracking-tighter">Rs. {(grandTotal || 0).toLocaleString()}</p></div>
       </div>
     </div>
   );
