@@ -220,7 +220,7 @@ const PurchaseInvoice = () => {
         <table className="w-full text-left">
           <thead className="bg-white/5 text-gray-500 uppercase text-xs"><tr><th className="p-4">Category</th><th className="p-4">Specs</th><th className="p-4">Qty</th><th className="p-4">Rate</th><th className="p-4">Total</th><th className="p-4"></th></tr></thead>
           <tbody className="divide-y divide-white/5">
-            {rows.map(r=>(<tr key={r.id} className="hover:bg-white/5"><td className="p-4 font-bold text-emerald-500">{r.mainCategory}</td><td className="p-4">{r.specsLabel}</td><td className="p-4">{r.qty}</td><td className="p-4">{r.rate}</td><td className="p-4 font-bold">Rs. {r.amount.toLocaleString()}</td><td className="p-4"><button onClick={()=>setRows(p=>p.filter(x=>x.id!==r.id))}><Trash2 className="text-red-500" size={16}/></button></td></tr>))}
+            {rows.map(r=>(<tr key={r.id} className="hover:bg-white/5"><td className="p-4 font-bold text-emerald-500">{r.mainCategory}</td><td className="p-4">{r.specsLabel}</td><td className="p-4">{r.qty}</td><td className="p-4">{r.rate}</td><td className="p-4 font-bold">Rs. {(r.amount || 0).toLocaleString()}</td><td className="p-4"><button onClick={()=>setRows(p=>p.filter(x=>x.id!==r.id))}><Trash2 className="text-red-500" size={16}/></button></td></tr>))}
           </tbody>
         </table>
       </div>
