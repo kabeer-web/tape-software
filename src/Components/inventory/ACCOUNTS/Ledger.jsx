@@ -553,10 +553,10 @@ export default function Ledger() {
                         <button onClick={cancelRenameParty} className="text-gray-500 p-1.5"><X size={16}/></button>
                       </div>
                     ) : (
-                      <h2 className="text-xl font-black text-[#22c55e] flex items-center gap-2 group">
+                      <h2 className="text-xl font-black text-[#22c55e] flex items-center gap-2">
                         {activeParty}
-                        <button onClick={startRenameParty} title="Party ka naam edit karo" className="text-gray-600 hover:text-[#22c55e] opacity-0 group-hover:opacity-100 transition"><Pencil size={14}/></button>
-                        <button onClick={handleDeleteParty} disabled={busyPartyOp} title="Party delete karo" className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition disabled:opacity-40"><Trash2 size={14}/></button>
+                        <button onClick={startRenameParty} title="Party ka naam edit karo" className="text-gray-400 hover:text-[#22c55e] bg-white/5 hover:bg-[#22c55e]/10 p-1.5 rounded-lg transition"><Pencil size={14}/></button>
+                        <button onClick={handleDeleteParty} disabled={busyPartyOp} title="Party delete karo" className="text-gray-400 hover:text-red-500 bg-white/5 hover:bg-red-500/10 p-1.5 rounded-lg transition disabled:opacity-40"><Trash2 size={14}/></button>
                       </h2>
                     )}
                     <p className="text-xs text-gray-500 mt-0.5">{activeType} Party</p>
