@@ -5,7 +5,7 @@ import { Search, PlusCircle, MinusCircle, Pencil, Trash2, Check, X, Package, Lay
 const CAT = 'SuperClear';
 const TITLE = 'SUPER CLEAR TAPE';
 const LOW = 50;
-const MICRONS = [37, 39, 40, 42, 48];
+const MICRONS = [37, 39, 40, 42,45,48];
 const WIDTHS = ['1280'];
 
 export default function SuperClear() {
