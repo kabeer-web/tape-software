@@ -181,7 +181,7 @@ export const generateInvoiceHTML = (bill) => {
 };
 
 const SaleInvoice = () => {
-  const { saveBill, postLedger, bills, ledger }      = useAccounts();
+  const { saveBill, postLedger, bills, ledger, parties }      = useAccounts();
   const { inventory, updateStock }    = useContext(StockContext);
 
   const [savedDraft] = useState(loadSaleDraft); // read once, on mount only
@@ -192,15 +192,15 @@ const SaleInvoice = () => {
   const [billNo,     setBillNo]     = useState(savedDraft?.billNo || '');
   const [buyerName,  setBuyerName]  = useState(savedDraft?.buyerName || '');
 
-  // Was: datalist only ever showed the hardcoded PARTIES array, so a party
-  // like "Shakir" who's already been billed once still never showed up when
-  // you searched for them again next time — the suggestion list never looked
-  // at real bills at all. Now it's the hardcoded starter names UNION every
-  // buyer name that's actually in a saved Sale bill UNION every party added
-  // in the Ledger (party_type 'Sale') — so a party created there (even with
-  // just an opening balance, no bill yet) shows up here too.
+  // `parties` (from AccountsContext, a real Supabase table, live via
+  // realtime) is now the primary source — a party added or renamed in
+  // Ledger shows up here immediately and correctly, no separate sync logic
+  // needed. Still UNIONed with the old hardcoded PARTIES list + bills for
+  // safety/backward-compatibility, but those are now just a defensive
+  // fallback, not the source of truth.
   const partySuggestions = useMemo(() => {
     const set = new Set(PARTIES);
+    (parties || []).forEach(p => { if (p.type === 'Sale') set.add(p.name); });
     (bills || []).forEach(b => {
       if (b.billType === 'Sale' && b.partyName) set.add(String(b.partyName).toUpperCase());
     });
@@ -208,7 +208,7 @@ const SaleInvoice = () => {
       if (e.party_type === 'Sale' && e.party_name) set.add(String(e.party_name).toUpperCase());
     });
     return Array.from(set);
-  }, [bills, ledger]);
+  }, [bills, ledger, parties]);
   const [date,       setDate]       = useState(savedDraft?.date || new Date().toLocaleDateString('en-GB'));
   const [form,       setForm]       = useState(savedDraft?.form || emptyItem);
   const [formErrs,   setFormErrs]   = useState({});
