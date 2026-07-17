@@ -196,6 +196,39 @@ export const deleteProduction = async (id) => {
   return true;
 };
 
+// ─── PARTIES API ───────────────────────────────────────────
+// A real table, not derived from ledger_entries/bills text — this is what
+// makes "add a party" and "rename a party" actually persist properly
+// instead of living only in a component's local state (which is what made
+// a rename look like it worked, then revert on reload). Needs the
+// `parties` table — see the 002_parties.sql migration handed over
+// alongside this file; run it once in the Supabase SQL editor first.
+export const getParties = async () => {
+  const { data, error } = await supabase.from('parties').select('*').order('name');
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const addParty = async (name, type) => {
+  const { data, error } = await supabase.from('parties').insert([{ name: name.trim().toUpperCase(), type }]).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const updateParty = async (id, updates) => {
+  const payload = { ...updates };
+  if (payload.name) payload.name = payload.name.trim().toUpperCase();
+  const { data, error } = await supabase.from('parties').update(payload).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const deleteParty = async (id) => {
+  const { error } = await supabase.from('parties').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
 // ─── ACTIVITY LOG API (History page) ──────────────────────
 // Backs the History page (src/Components/Analytics.jsx — filename kept as
 // Analytics on purpose, only the sidebar label + in-page heading changed to
