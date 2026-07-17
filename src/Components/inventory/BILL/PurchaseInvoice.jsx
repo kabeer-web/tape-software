@@ -100,7 +100,7 @@ const CATEGORY_ICON = { Core: Package, Carton: Box, Jambo: Layers };
 
 const PurchaseInvoice = () => {
   const { addRoll, upsertStock } = useContext(StockContext);
-  const { saveBill, postLedger, bills, ledger } = useAccounts();
+  const { saveBill, postLedger, bills, ledger, parties } = useAccounts();
 
   const [savedDraft] = useState(loadPurchaseDraft); // read once, on mount only
   const [showDraftBanner, setShowDraftBanner] = useState(() =>
@@ -120,14 +120,14 @@ const PurchaseInvoice = () => {
   const [updateStock, setUpdateStock] = useState(savedDraft?.updateStock ?? true);
   const fileRef = useRef(null);
 
-  // Same fix as Sale Invoice: suggestions used to be only the hardcoded
-  // PURCHASE_PARTIES array, so a supplier already billed before still never
-  // showed up in search next time. Now it's that starter list UNION every
-  // supplier name that's actually in a saved Purchase bill UNION every party
-  // added in the Ledger (party_type 'Purchase') — so a supplier created
-  // there (even just an opening balance, no bill yet) shows up here too.
+  // `parties` (from AccountsContext, a real Supabase table, live via
+  // realtime) is now the primary source — a supplier added or renamed in
+  // Ledger shows up here immediately and correctly. Still UNIONed with the
+  // old hardcoded PURCHASE_PARTIES list + bills for safety, but those are
+  // now just a defensive fallback, not the source of truth.
   const supplierSuggestions = useMemo(() => {
     const set = new Set(PURCHASE_PARTIES);
+    (parties || []).forEach(p => { if (p.type === 'Purchase') set.add(p.name); });
     (bills || []).forEach(b => {
       if (b.billType === 'Purchase' && b.partyName) set.add(String(b.partyName).toUpperCase());
     });
@@ -135,7 +135,7 @@ const PurchaseInvoice = () => {
       if (e.party_type === 'Purchase' && e.party_name) set.add(String(e.party_name).toUpperCase());
     });
     return Array.from(set);
-  }, [bills, ledger]);
+  }, [bills, ledger, parties]);
   const [form, setForm] = useState(savedDraft?.form || emptyForm);
   const [rows, setRows] = useState(savedDraft?.rows || []);
   const [msg, setMsg] = useState({ text: '', ok: true });
