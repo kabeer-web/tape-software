@@ -12,28 +12,9 @@ import {
 } from 'lucide-react';
 
 // ── Parties ────────────────────────────────────────────────
-const SALE_PARTIES = [
-  'AR PACKAGES','ROSHAN TRADER','HUZAIFA TRADER','SHAMS STATIONARY',
-  'ABDUL RAUF','HAMZULLAH','ANEES STATIONARY','A ONE','ZEESHAN HYD',
-  'ABDUL BASIT','MD TRADERS','MUNEER BHAI','ANWAR BHAI','FAROOQ BHAI',
-  'GR TRADER','HAMZA SIALKOT','HASHMI TRADER','GAIN TEX INTERNATIONAL',
-  'NAQI TAQI','MEMON ELECTRIC','MOK PAKISTAN TRADER','SABIR BROTHER 1',
-  'SABIR BROTHER 2','SHERAZ HABIB','SANAULLAH TEXTILE','SUJJAD ALI',
-  'USAMA STATIONARY','ZEESHAN HAIDRABAD','WAHEED WALI','AL FAREED',
-  'SHOKAT HAYAT','GUL AMIR','AJ ARSALAN','HAS GR TRADER','MUDASIR MEMON',
-  'UMAIR FISHERY','AMEER AKBAR','ISMAIL BHAI','BILAL BHAI',
-  'FARHAN NEW KARACHI','N.K ENTERPRISES',
-];
-
-const PURCHASE_PARTIES = [
-  'UNIVERSAL COTTING','KOSHER','CHAWLA INDUSTRY','IBAD CORE',
-  'TAHSEEN CARTON','TALHA WASEEM','ASGHR CORE','DEER TAPE','SAMAD BHAI',
-];
-
-const ALL_PARTIES = [
-  ...SALE_PARTIES.map(n => ({ name: n, type: 'Sale' })),
-  ...PURCHASE_PARTIES.map(n => ({ name: n, type: 'Purchase' })),
-];
+// The starter names that used to live here (SALE_PARTIES / PURCHASE_PARTIES
+// / ALL_PARTIES) are now rows in the `parties` Supabase table instead — see
+// 002_parties.sql. Party data comes from AccountsContext (`parties`) now.
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const todayStr = () => new Date().toLocaleDateString('en-GB');
@@ -143,7 +124,7 @@ const exportCSV = (partyName, entries, openingBal) => {
 //  MAIN COMPONENT
 // ─────────────────────────────────────────────────────────
 export default function Ledger() {
-  const { refreshAll } = useAccounts(); // so AccountsContext (Sale/Purchase invoice party suggestions) stays in sync after a rename/delete here
+  const { refreshAll, parties, addParty, renameParty, deleteParty } = useAccounts();
   const [entries,     setEntries]     = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [activeParty, setActiveParty] = useState(null);
@@ -168,11 +149,6 @@ export default function Ledger() {
   const [editId,   setEditId]   = useState(null);
   const [editData, setEditData] = useState({});
 
-  // Parties added via the new "+ New Party" box below but that don't have
-  // any ledger entry yet (a brand-new party has nothing in `entries` until
-  // an opening balance / payment is posted for them, so without this they'd
-  // vanish from the sidebar the moment you clicked away).
-  const [customParties, setCustomParties] = useState([]); // [{ name, type }]
   const [showAddParty, setShowAddParty]   = useState(false);
   const [newPartyName, setNewPartyName]   = useState('');
 
@@ -193,22 +169,20 @@ export default function Ledger() {
   };
 
   // ── Party list with balances ───────────────────────────
-  // Was: ALL_PARTIES.filter(...) — a pure hardcoded array, so a party who
-  // only exists because a Sale/Purchase bill was raised for them (which DOES
-  // save a real ledger_entries row) never showed up here, since this list
-  // never looked at `entries` at all. Now it's the hardcoded starter names
-  // UNION whatever party names actually have entries in the DB UNION anyone
-  // just added via "+ New Party" — so a brand-new party is visible as soon
-  // as they're billed, with no code edit needed.
+  // `parties` (from AccountsContext) is now a real Supabase table — the
+  // single source of truth for who exists and their type — instead of a
+  // hardcoded array plus whatever happened to already have a ledger entry.
+  // UNIONed defensively with any stray party_name found only in old entries
+  // (e.g. from before this migration was run), so nothing already in the
+  // DB disappears.
   const partyDirectory = useMemo(() => {
-    const dir = new Map(ALL_PARTIES.map(p => [p.name, p.type]));
+    const dir = new Map(parties.map(p => [p.name, p]));
     entries.forEach(e => {
       const n = (e.party_name || '').trim().toUpperCase();
-      if (n && !dir.has(n)) dir.set(n, e.party_type || 'Sale');
+      if (n && !dir.has(n)) dir.set(n, { name: n, type: e.party_type || 'Sale', _id: null });
     });
-    customParties.forEach(p => { if (!dir.has(p.name)) dir.set(p.name, p.type); });
-    return Array.from(dir.entries()).map(([name, type]) => ({ name, type }));
-  }, [entries, customParties]);
+    return Array.from(dir.values());
+  }, [parties, entries]);
 
   const partyList = useMemo(() =>
     partyDirectory
@@ -234,16 +208,23 @@ export default function Ledger() {
       })
   , [partyDirectory, activeType, search, entries]);
 
-  // Type a name, hit Add — selects it immediately (with zero balance) and
-  // opens the Opening Balance box so it gets its first real DB row right away.
-  const handleAddNewParty = () => {
+  // Type a name, hit Add — saves a real row in the `parties` table right
+  // away (see AccountsContext.handleAddParty), then selects it and opens
+  // the Opening Balance box. Unlike before, this party now exists even if
+  // you never end up adding an opening balance / entry for it.
+  const handleAddNewParty = async () => {
     const name = newPartyName.trim().toUpperCase();
     if (!name) return;
-    setCustomParties(prev => prev.some(p => p.name === name) ? prev : [...prev, { name, type: activeType }]);
-    setNewPartyName('');
-    setShowAddParty(false);
-    handlePartySelect(name);
-    setShowOpening(true);
+    if (partyDirectory.some(p => p.name === name)) { flash('❌ Ye party pehle se maujood hai', false); return; }
+    try {
+      await addParty(name, activeType);
+      setNewPartyName('');
+      setShowAddParty(false);
+      handlePartySelect(name);
+      setShowOpening(true);
+    } catch (e) {
+      flash('❌ Party add nahi hui: ' + e.message, false);
+    }
   };
 
   const activeData = useMemo(() =>
@@ -299,7 +280,7 @@ export default function Ledger() {
     if (!activeParty || !openingAmt) { flash('❌ Amount daalen', false); return; }
     setSaving(true);
     try {
-      const partyMeta = ALL_PARTIES.find(p => p.name === activeParty);
+      const partyMeta = partyDirectory.find(p => p.name === activeParty);
       const payload = {
         party_name:    activeParty,
         party_type:    partyMeta?.type || activeType,
@@ -331,7 +312,7 @@ export default function Ledger() {
     if (!activeParty || !payForm.amount) { flash('❌ Amount daalen', false); return; }
     setSaving(true);
     try {
-      const partyMeta = ALL_PARTIES.find(p => p.name === activeParty);
+      const partyMeta = partyDirectory.find(p => p.name === activeParty);
       const saved = await addLedgerEntry({
         party_name:  activeParty,
         party_type:  partyMeta?.type || activeType,
@@ -398,48 +379,50 @@ export default function Ledger() {
   const startRenameParty = () => { setRenameInput(activeParty || ''); setRenamingParty(true); };
   const cancelRenameParty = () => { setRenamingParty(false); setRenameInput(''); };
 
-  // Renaming = bulk-update every ledger entry for this party to the new
-  // name (there's no separate "parties" table — a party only exists as the
-  // party_name on its entries), then flip activeParty over to the new name.
+  // Renaming now updates the real `parties` table row (AccountsContext.
+  // renameParty) — that's the fix for the rename-reverts-on-reload bug: a
+  // rename used to have nothing canonical to persist to, so it only ever
+  // lived in this component's memory. It also bulk-updates this party's own
+  // ledger entries so their history stays correctly labeled.
   const handleRenameParty = async () => {
     const newName = renameInput.trim().toUpperCase();
     if (!newName || newName === activeParty) { cancelRenameParty(); return; }
     if (partyDirectory.some(p => p.name === newName)) { flash('❌ Ye naam pehle se kisi aur party ka hai', false); return; }
+    const partyRow = partyDirectory.find(p => p.name === activeParty);
+    if (!partyRow || !partyRow._id) { flash('❌ Ye purani party migration se pehle ki hai — pehle ise dobara "+ New Party" se add karo.', false); return; }
     setBusyPartyOp(true);
     try {
-      const partyEntries = entries.filter(e => (e.party_name || '').toUpperCase() === activeParty.toUpperCase());
-      for (const e of partyEntries) {
-        await updateLedgerEntry(e._id, { party_name: newName });
-      }
+      await renameParty(partyRow, newName);
       setEntries(prev => prev.map(e => (e.party_name || '').toUpperCase() === activeParty.toUpperCase() ? { ...e, party_name: newName } : e));
-      setCustomParties(prev => prev.map(p => p.name === activeParty ? { ...p, name: newName } : p));
       setActiveParty(newName);
       cancelRenameParty();
       flash(`✅ Party rename ho gayi: ${newName}`);
-      refreshAll?.();
     } catch (e) {
       flash('❌ Rename fail: ' + e.message, false);
     } finally { setBusyPartyOp(false); }
   };
 
-  // Deleting a party = deleting every ledger entry that belongs to it. This
-  // does NOT touch any Sale/Purchase bills already saved for that party —
-  // only their ledger trail. Confirmed with a typed name, since this can't
-  // be undone.
+  // Deleting a party removes its row from the `parties` table AND all of
+  // its ledger entries (AccountsContext.deleteParty). Sale/Purchase bills
+  // already saved for that party are left untouched — deleting a party
+  // shouldn't erase past invoices. Confirmed with a typed name since this
+  // can't be undone.
   const handleDeleteParty = async () => {
+    const partyRow = partyDirectory.find(p => p.name === activeParty);
     const partyEntries = entries.filter(e => (e.party_name || '').toUpperCase() === activeParty.toUpperCase());
-    const typed = window.prompt(`"${activeParty}" ki ${partyEntries.length} ledger entries permanently delete ho jayengi. Confirm karne ke liye party ka naam type karo:`);
+    const typed = window.prompt(`"${activeParty}" delete ho jayegi (${partyEntries.length} ledger entries samet). Bills touch nahi honge. Confirm karne ke liye party ka naam type karo:`);
     if (!typed || typed.trim().toUpperCase() !== activeParty.toUpperCase()) { if (typed !== null) flash('❌ Naam match nahi hua — cancel kar diya', false); return; }
     setBusyPartyOp(true);
     try {
-      for (const e of partyEntries) {
-        await deleteLedgerEntry(e._id);
+      if (partyRow && partyRow._id) {
+        await deleteParty(partyRow);
+      } else {
+        // Pre-migration party with no real `parties` row — just clear its entries.
+        for (const e of partyEntries) await deleteLedgerEntry(e._id);
       }
       setEntries(prev => prev.filter(e => (e.party_name || '').toUpperCase() !== activeParty.toUpperCase()));
-      setCustomParties(prev => prev.filter(p => p.name !== activeParty));
       flash(`✅ Party delete ho gayi: ${activeParty}`);
       setActiveParty(null);
-      refreshAll?.();
     } catch (e) {
       flash('❌ Delete fail: ' + e.message, false);
     } finally { setBusyPartyOp(false); }
