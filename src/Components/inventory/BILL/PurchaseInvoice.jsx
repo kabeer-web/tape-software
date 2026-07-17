@@ -100,7 +100,7 @@ const CATEGORY_ICON = { Core: Package, Carton: Box, Jambo: Layers };
 
 const PurchaseInvoice = () => {
   const { addRoll, upsertStock } = useContext(StockContext);
-  const { saveBill, postLedger, bills } = useAccounts();
+  const { saveBill, postLedger, bills, ledger } = useAccounts();
 
   const [savedDraft] = useState(loadPurchaseDraft); // read once, on mount only
   const [showDraftBanner, setShowDraftBanner] = useState(() =>
@@ -123,14 +123,19 @@ const PurchaseInvoice = () => {
   // Same fix as Sale Invoice: suggestions used to be only the hardcoded
   // PURCHASE_PARTIES array, so a supplier already billed before still never
   // showed up in search next time. Now it's that starter list UNION every
-  // supplier name that's actually in a saved Purchase bill.
+  // supplier name that's actually in a saved Purchase bill UNION every party
+  // added in the Ledger (party_type 'Purchase') — so a supplier created
+  // there (even just an opening balance, no bill yet) shows up here too.
   const supplierSuggestions = useMemo(() => {
     const set = new Set(PURCHASE_PARTIES);
     (bills || []).forEach(b => {
       if (b.billType === 'Purchase' && b.partyName) set.add(String(b.partyName).toUpperCase());
     });
+    (ledger || []).forEach(e => {
+      if (e.party_type === 'Purchase' && e.party_name) set.add(String(e.party_name).toUpperCase());
+    });
     return Array.from(set);
-  }, [bills]);
+  }, [bills, ledger]);
   const [form, setForm] = useState(savedDraft?.form || emptyForm);
   const [rows, setRows] = useState(savedDraft?.rows || []);
   const [msg, setMsg] = useState({ text: '', ok: true });
