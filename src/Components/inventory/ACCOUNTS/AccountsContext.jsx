@@ -41,6 +41,13 @@ export const AccountsProvider = ({ children }) => {
   // that change live into every open tab/page — including the Sale/Purchase
   // Invoice party search, without needing a manual refresh or reload.
   useEffect(() => {
+    // React.StrictMode double-invokes this effect in dev; removeChannel()
+    // is async, so the second run can still see the old channel registered
+    // under this topic. Clear it out first so .channel() always gives us a
+    // fresh, un-subscribed instance to call .on() on.
+    const stale = supabase.getChannels().find(ch => ch.topic === 'realtime:parties_live');
+    if (stale) supabase.removeChannel(stale);
+
     const channel = supabase
       .channel('parties_live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parties' }, (payload) => {
@@ -210,3 +217,4 @@ export const AccountsProvider = ({ children }) => {
     </AccountsContext.Provider>
   );
 };
+    
