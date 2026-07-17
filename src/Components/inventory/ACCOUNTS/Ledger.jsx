@@ -3,6 +3,7 @@ import {
   getLedgerEntries, addLedgerEntry,
   updateLedgerEntry, deleteLedgerEntry
 } from '../../../api';
+import { useAccounts } from './AccountsContext';
 import {
   Users, Plus, Trash2, Pencil, Check, X,
   TrendingUp, TrendingDown, Search, Calendar,
@@ -26,7 +27,7 @@ const SALE_PARTIES = [
 
 const PURCHASE_PARTIES = [
   'UNIVERSAL COTTING','KOSHER','CHAWLA INDUSTRY','IBAD CORE',
-  'TAHSEEN CARTON','TALHA WASEEM','ASGHR CORE','DEER TAPE','SAMAD BHAI','SEEMA PACKAGES',
+  'TAHSEEN CARTON','TALHA WASEEM','ASGHR CORE','DEER TAPE','SAMAD BHAI',
 ];
 
 const ALL_PARTIES = [
@@ -142,12 +143,18 @@ const exportCSV = (partyName, entries, openingBal) => {
 //  MAIN COMPONENT
 // ─────────────────────────────────────────────────────────
 export default function Ledger() {
+  const { refreshAll } = useAccounts(); // so AccountsContext (Sale/Purchase invoice party suggestions) stays in sync after a rename/delete here
   const [entries,     setEntries]     = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [activeParty, setActiveParty] = useState(null);
   const [activeType,  setActiveType]  = useState('Sale');
   const [search,      setSearch]      = useState('');
   const [monthFilter, setMonthFilter] = useState('All');
+
+  // Rename / delete party
+  const [renamingParty, setRenamingParty] = useState(false);
+  const [renameInput,   setRenameInput]   = useState('');
+  const [busyPartyOp,   setBusyPartyOp]   = useState(false);
 
   // Forms
   const [showPayment,  setShowPayment]  = useState(false); // Manual payment form
@@ -314,6 +321,7 @@ export default function Ledger() {
       }
       setShowOpening(false); setOpeningAmt('');
       flash('✅ Opening balance set ho gaya!');
+      refreshAll?.();
     } catch (e) { flash('❌ ' + e.message, false); }
     finally { setSaving(false); }
   };
@@ -338,6 +346,7 @@ export default function Ledger() {
       setPayForm({ entry_type:'credit', description:'', amount:'', date:todayStr(), ref_bill_no:'' });
       setShowPayment(false);
       flash('✅ Entry add ho gayi!');
+      refreshAll?.();
     } catch (e) { flash('❌ ' + e.message, false); }
     finally { setSaving(false); }
   };
@@ -385,6 +394,56 @@ export default function Ledger() {
   };
 
   const inp = 'w-full bg-black/40 p-2.5 rounded-xl border border-[#22c55e]/20 outline-none text-sm focus:border-[#22c55e]/50 transition';
+
+  const startRenameParty = () => { setRenameInput(activeParty || ''); setRenamingParty(true); };
+  const cancelRenameParty = () => { setRenamingParty(false); setRenameInput(''); };
+
+  // Renaming = bulk-update every ledger entry for this party to the new
+  // name (there's no separate "parties" table — a party only exists as the
+  // party_name on its entries), then flip activeParty over to the new name.
+  const handleRenameParty = async () => {
+    const newName = renameInput.trim().toUpperCase();
+    if (!newName || newName === activeParty) { cancelRenameParty(); return; }
+    if (partyDirectory.some(p => p.name === newName)) { flash('❌ Ye naam pehle se kisi aur party ka hai', false); return; }
+    setBusyPartyOp(true);
+    try {
+      const partyEntries = entries.filter(e => (e.party_name || '').toUpperCase() === activeParty.toUpperCase());
+      for (const e of partyEntries) {
+        await updateLedgerEntry(e._id, { party_name: newName });
+      }
+      setEntries(prev => prev.map(e => (e.party_name || '').toUpperCase() === activeParty.toUpperCase() ? { ...e, party_name: newName } : e));
+      setCustomParties(prev => prev.map(p => p.name === activeParty ? { ...p, name: newName } : p));
+      setActiveParty(newName);
+      cancelRenameParty();
+      flash(`✅ Party rename ho gayi: ${newName}`);
+      refreshAll?.();
+    } catch (e) {
+      flash('❌ Rename fail: ' + e.message, false);
+    } finally { setBusyPartyOp(false); }
+  };
+
+  // Deleting a party = deleting every ledger entry that belongs to it. This
+  // does NOT touch any Sale/Purchase bills already saved for that party —
+  // only their ledger trail. Confirmed with a typed name, since this can't
+  // be undone.
+  const handleDeleteParty = async () => {
+    const partyEntries = entries.filter(e => (e.party_name || '').toUpperCase() === activeParty.toUpperCase());
+    const typed = window.prompt(`"${activeParty}" ki ${partyEntries.length} ledger entries permanently delete ho jayengi. Confirm karne ke liye party ka naam type karo:`);
+    if (!typed || typed.trim().toUpperCase() !== activeParty.toUpperCase()) { if (typed !== null) flash('❌ Naam match nahi hua — cancel kar diya', false); return; }
+    setBusyPartyOp(true);
+    try {
+      for (const e of partyEntries) {
+        await deleteLedgerEntry(e._id);
+      }
+      setEntries(prev => prev.filter(e => (e.party_name || '').toUpperCase() !== activeParty.toUpperCase()));
+      setCustomParties(prev => prev.filter(p => p.name !== activeParty));
+      flash(`✅ Party delete ho gayi: ${activeParty}`);
+      setActiveParty(null);
+      refreshAll?.();
+    } catch (e) {
+      flash('❌ Delete fail: ' + e.message, false);
+    } finally { setBusyPartyOp(false); }
+  };
 
   const filtDebit  = filteredEntries.filter(e=>e.entry_type==='debit' ).reduce((s,e)=>s+(Number(e.amount)||0),0);
   const filtCredit = filteredEntries.filter(e=>e.entry_type==='credit').reduce((s,e)=>s+(Number(e.amount)||0),0);
@@ -481,7 +540,25 @@ export default function Ledger() {
               <div className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20 mb-4">
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
                   <div>
-                    <h2 className="text-xl font-black text-[#22c55e]">{activeParty}</h2>
+                    {renamingParty ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          value={renameInput}
+                          onChange={e => setRenameInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleRenameParty(); if (e.key === 'Escape') cancelRenameParty(); }}
+                          className="bg-black/40 p-2 rounded-lg border border-[#22c55e]/40 outline-none text-lg font-black text-[#22c55e]"
+                        />
+                        <button onClick={handleRenameParty} disabled={busyPartyOp} className="text-[#22c55e] p-1.5 disabled:opacity-40"><Check size={16}/></button>
+                        <button onClick={cancelRenameParty} className="text-gray-500 p-1.5"><X size={16}/></button>
+                      </div>
+                    ) : (
+                      <h2 className="text-xl font-black text-[#22c55e] flex items-center gap-2 group">
+                        {activeParty}
+                        <button onClick={startRenameParty} title="Party ka naam edit karo" className="text-gray-600 hover:text-[#22c55e] opacity-0 group-hover:opacity-100 transition"><Pencil size={14}/></button>
+                        <button onClick={handleDeleteParty} disabled={busyPartyOp} title="Party delete karo" className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition disabled:opacity-40"><Trash2 size={14}/></button>
+                      </h2>
+                    )}
                     <p className="text-xs text-gray-500 mt-0.5">{activeType} Party</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
