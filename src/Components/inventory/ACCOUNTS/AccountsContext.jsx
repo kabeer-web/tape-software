@@ -41,15 +41,14 @@ export const AccountsProvider = ({ children }) => {
   // that change live into every open tab/page — including the Sale/Purchase
   // Invoice party search, without needing a manual refresh or reload.
   useEffect(() => {
-    // React.StrictMode double-invokes this effect in dev; removeChannel()
-    // is async, so the second run can still see the old channel registered
-    // under this topic. Clear it out first so .channel() always gives us a
-    // fresh, un-subscribed instance to call .on() on.
-    const stale = supabase.getChannels().find(ch => ch.topic === 'realtime:parties_live');
-    if (stale) supabase.removeChannel(stale);
-
+    // Unique name per mount — a fixed name like 'parties_live' can collide
+    // if this effect runs twice (React StrictMode's mount→cleanup→mount in
+    // dev, or the provider remounting), throwing "cannot add
+    // postgres_changes callbacks... after subscribe()" because Supabase
+    // reuses/errors on a channel that's already subscribed under that name.
+    const channelName = `parties_live_${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel('parties_live')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parties' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const row = { ...payload.new, _id: payload.new.id };
@@ -217,4 +216,3 @@ export const AccountsProvider = ({ children }) => {
     </AccountsContext.Provider>
   );
 };
-    
