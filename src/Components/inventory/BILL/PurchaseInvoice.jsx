@@ -314,7 +314,7 @@ const PurchaseInvoice = () => {
       </div>
 
       {/* Item entry card */}
-      <datalist id="brand-list">{Array.from(new Set([...(brands||[]).map(b=>b.name), 'Tesco','Bell','Race','Jhonson','Local','Imported'])).map(b=><option key={b} value={b}/>)}</datalist>
+      <datalist id="brand-list">{Array.from(new Set([...(brands||[]).map(b=>b.name), 'Tesco','Bell','Race','Jhonson','STICK MASTER',])).map(b=><option key={b} value={b}/>)}</datalist>
       <div className="bg-white/[0.03] p-6 rounded-[2rem] border border-[#22c55e]/20 mb-5">
         <div className="flex gap-2 mb-5">
           {['Core','Carton','Jambo'].map(cat => {
