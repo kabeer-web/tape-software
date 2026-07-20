@@ -59,8 +59,12 @@ const Analytics = () => {
   // updates itself live — no refresh needed, even if the action happened
   // on another tab/device.
   useEffect(() => {
+    // Unique name per mount — see the identical comment in
+    // AccountsContext.jsx for why a fixed channel name can crash under
+    // React StrictMode's double-invoked effects in dev.
+    const channelName = `activity_log_live_${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel('activity_log_live')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_log' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const row = { ...payload.new, _id: payload.new.id };
