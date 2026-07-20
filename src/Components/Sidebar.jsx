@@ -13,8 +13,6 @@ const Sidebar = ({ onClose = () => {} }) => {
 
   const [isInventoryOpen, setIsInventoryOpen] = useState(true);
   const [isJamboOpen, setIsJamboOpen] = useState(false);
-  const [isCartonOpen, setIsCartonOpen] = useState(false);
-  const [isCoreOpen, setIsCoreOpen] = useState(false);
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
 
@@ -32,19 +30,8 @@ const Sidebar = ({ onClose = () => {} }) => {
     { name: "Foam Tape",    path: "/inventory/jambo/foam-tape" },
   ];
 
-  const cartonBrands = [
-    { name: "Bell",     path: "/inventory/carton/bell" },
-    { name: "Race",     path: "/inventory/carton/race" },
-    { name: "Tesco",    path: "/inventory/carton/tesco" },
-    { name: "Jhonson",  path: "/inventory/carton/jhonson" },
-  ];
-
-  const coreBrands = [
-    { name: "Bell",    path: "/inventory/core/bell" },
-    { name: "Race",    path: "/inventory/core/race" },
-    { name: "Tesco",   path: "/inventory/core/tesco" },
-    { name: "Jhonson", path: "/inventory/core/jhonson" },
-  ];
+  // Carton/Core Stock are single dynamic pages now (brand list comes from
+  // the `brands` table) — see CartonManager.jsx / CoreManager.jsx.
 
   const billingPages = [
     { name: "Sale Invoice",     path: "/billing/sale" },
@@ -157,33 +144,13 @@ const Sidebar = ({ onClose = () => {} }) => {
               )}
               
 
-              <button onClick={() => setIsCartonOpen(!isCartonOpen)} className="flex items-center justify-between w-full text-xs text-gray-400 hover:text-[#22c55e] py-1.5 px-2 rounded-lg hover:bg-white/5 transition">
-                <span className="font-semibold">Carton Stock</span>
-                {isCartonOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              </button>
-              {isCartonOpen && (
-                <div className="ml-3 flex flex-col gap-0.5 mb-1 border-l border-[#22c55e]/10 pl-2">
-                  {cartonBrands.map(b => (
-                    <NavLink key={b.path} to={b.path} end onClick={handleNavClick} className={subLinkClass}>
-                      <span className="w-1 h-1 rounded-full bg-current opacity-60" />{b.name}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
+              <NavLink to="/inventory/carton" end onClick={handleNavClick} className={navLinkClass}>
+                <span className="w-1 h-1 rounded-full bg-current opacity-60" /> Carton Stock
+              </NavLink>
 
-              <button onClick={() => setIsCoreOpen(!isCoreOpen)} className="flex items-center justify-between w-full text-xs text-gray-400 hover:text-[#22c55e] py-1.5 px-2 rounded-lg hover:bg-white/5 transition">
-                <span className="font-semibold">Core Stock</span>
-                {isCoreOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              </button>
-              {isCoreOpen && (
-                <div className="ml-3 flex flex-col gap-0.5 mb-1 border-l border-[#22c55e]/10 pl-2">
-                  {coreBrands.map(b => (
-                    <NavLink key={b.path} to={b.path} end onClick={handleNavClick} className={subLinkClass}>
-                      <span className="w-1 h-1 rounded-full bg-current opacity-60" />{b.name}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
+              <NavLink to="/inventory/core" end onClick={handleNavClick} className={navLinkClass}>
+                <span className="w-1 h-1 rounded-full bg-current opacity-60" /> Core Stock
+              </NavLink>
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect, useCallback, useContext, useRef } from 'react';
-import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory, logActivity } from '../../api';
+import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory, logActivity, getBrands, addBrand, deleteBrand } from '../../api';
+import { supabase } from '../../supabase';
 
 // Display/search helpers — exported here (not a separate file) since every
 // place that needs them already imports from StockContext anyway.
@@ -81,6 +82,76 @@ export const StockProvider = ({ children }) => {
 
   useEffect(() => { refreshInventory(); }, [refreshInventory]);
 
+  // ── Brands (Core/Carton) ────────────────────────────────
+  // A real `brands` table now, not a hardcoded list baked into a separate
+  // file per brand — see 003_brands.sql. New brands can be added from the
+  // UI (addBrandManual below) or auto-register themselves the moment
+  // they're used (see upsertStock further down), so a new brand never
+  // needs a code change.
+  const [brands, setBrands] = useState([]);
+  const brandsRef = useRef([]);
+  const setBrandsBoth = (updater) => {
+    setBrands(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      brandsRef.current = next;
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    getBrands().then(setBrandsBoth).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    // Unique channel name per mount — avoids the "already subscribed" crash
+    // if this effect ever runs twice (React StrictMode in dev, etc.).
+    const channelName = `brands_live_${Math.random().toString(36).slice(2)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'brands' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const row = { ...payload.new, _id: payload.new.id };
+          setBrandsBoth(prev => prev.some(b => b._id === row._id) ? prev : [...prev, row].sort((a,b)=>a.name.localeCompare(b.name)));
+        } else if (payload.eventType === 'DELETE') {
+          setBrandsBoth(prev => prev.filter(b => b._id !== payload.old.id));
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Manual "+ Add Brand" from the UI.
+  const addBrandManual = async (name) => {
+    const clean = name.trim();
+    if (!clean) return;
+    if (brandsRef.current.some(b => b.name.toLowerCase() === clean.toLowerCase())) return;
+    const saved = await addBrand(clean);
+    setBrandsBoth(prev => [...prev, saved].sort((a,b)=>a.name.localeCompare(b.name)));
+    return saved;
+  };
+
+  const deleteBrandManual = async (id) => {
+    await deleteBrand(id);
+    setBrandsBoth(prev => prev.filter(b => b._id !== id));
+  };
+
+  // Silently registers a brand the first time it's used (e.g. a Purchase
+  // bill line for a brand that doesn't exist yet) — this is what makes "add
+  // a new brand" not require going into the code at all. Never throws; a
+  // failure here shouldn't block the actual stock save.
+  const ensureBrandExists = async (name) => {
+    if (!name) return;
+    const clean = String(name).trim();
+    if (!clean) return;
+    if (brandsRef.current.some(b => b.name.toLowerCase() === clean.toLowerCase())) return;
+    try {
+      const saved = await addBrand(clean);
+      setBrandsBoth(prev => prev.some(b => b._id === saved._id) ? prev : [...prev, saved].sort((a,b)=>a.name.localeCompare(b.name)));
+    } catch (e) {
+      console.warn('ensureBrandExists failed (non-fatal):', e.message);
+    }
+  };
+
   // ✅ Add roll/item. Auto-generates a sequential roll number for Jambo
   // categories only. Retries on a rare concurrent-duplicate collision
   // (two people — or two lines in the same bill — saving at the same
@@ -151,6 +222,7 @@ export const StockProvider = ({ children }) => {
   const upsertStock = async (matchFields, delta, extraFields = {}) => {
     const amount = Number(delta) || 0;
     if (amount === 0) return;
+    if (matchFields.brand && amount > 0) ensureBrandExists(matchFields.brand); // fire-and-forget, non-blocking
     const existing = inventoryRef.current.find(i =>
       Object.entries(matchFields).every(([k, v]) => String(i[k] ?? '') === String(v ?? ''))
     );
@@ -296,7 +368,8 @@ export const StockProvider = ({ children }) => {
     <StockContext.Provider value={{
       inventory, loading, refreshInventory,
       adjustStock, addRoll, updateStock, removeItem, setInventory,
-      issueYards, editItemYards, editItem, upsertStock, resetInventory
+      issueYards, editItemYards, editItem, upsertStock, resetInventory,
+      brands, addBrandManual, deleteBrandManual
     }}>
       {children}
     </StockContext.Provider>

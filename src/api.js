@@ -190,6 +190,29 @@ export const updateProduction = async (id, updates) => {
   return mapId(data);
 };
 
+// ─── BRANDS API ────────────────────────────────────────────
+// A real table instead of a hardcoded list per brand-file — see
+// 003_brands.sql. Adding a Core/Carton brand here is what makes it
+// selectable everywhere (Purchase Invoice, Core/Carton stock pages)
+// without touching any code.
+export const getBrands = async () => {
+  const { data, error } = await supabase.from('brands').select('*').order('name');
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const addBrand = async (name) => {
+  const { data, error } = await supabase.from('brands').insert([{ name: name.trim() }]).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
+export const deleteBrand = async (id) => {
+  const { error } = await supabase.from('brands').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
 export const deleteProduction = async (id) => {
   const { error } = await supabase.from('productions').delete().eq('id', id);
   if (error) throw new Error(error.message);

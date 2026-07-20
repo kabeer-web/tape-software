@@ -25,17 +25,12 @@ import Masking from './Components/inventory/JAMBOFILES/masking';
 import Tissue from './Components/inventory/JAMBOFILES/tissue';
 import Foam from './Components/inventory/JAMBOFILES/foam';
 
-// Carton
-import BellCarton from './Components/inventory/CARTON BRANDS/bell';
-import RaceCarton from './Components/inventory/CARTON BRANDS/race';
-import TescoCarton from './Components/inventory/CARTON BRANDS/tesco';
-import JhonsonCarton from './Components/inventory/CARTON BRANDS/jhonson';
-
-// Core
-import Bell from './Components/inventory/CORE BRANDS/bell';
-import Race from './Components/inventory/CORE BRANDS/race';
-import Tesco from './Components/inventory/CORE BRANDS/tesco';
-import Jhonson from './Components/inventory/CORE BRANDS/jhonson';
+// Carton & Core — one dynamic page each now (brand list comes from the
+// `brands` table), replacing what used to be 4 hardcoded files per
+// category (CARTON BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx and
+// the CORE BRANDS equivalents). A new brand no longer needs a new file.
+import CartonManager from './Components/inventory/CartonManager';
+import CoreManager from './Components/inventory/CoreManager';
 
 // Billing & Accounts (YAHAN FIX KIYA HAI)
 import SaleInvoice from './Components/inventory/BILL/SaleInvoice';
@@ -95,14 +90,16 @@ const AppLayout = () => {
             <Route path="/inventory/jambo/masking" element={<Masking />} />
             <Route path="/inventory/jambo/tissue-tape" element={<Tissue />} />
             <Route path="/inventory/jambo/foam-tape" element={<Foam />} />
-            <Route path="/inventory/carton/bell" element={<BellCarton />} />
-            <Route path="/inventory/carton/race" element={<RaceCarton />} />
-            <Route path="/inventory/carton/tesco" element={<TescoCarton />} />
-            <Route path="/inventory/carton/jhonson" element={<JhonsonCarton />} />
-            <Route path="/inventory/core/bell" element={<Bell />} />
-            <Route path="/inventory/core/race" element={<Race />} />
-            <Route path="/inventory/core/tesco" element={<Tesco />} />
-            <Route path="/inventory/core/jhonson" element={<Jhonson />} />
+            <Route path="/inventory/carton/bell" element={<Navigate to="/inventory/carton" replace />} />
+            <Route path="/inventory/carton/race" element={<Navigate to="/inventory/carton" replace />} />
+            <Route path="/inventory/carton/tesco" element={<Navigate to="/inventory/carton" replace />} />
+            <Route path="/inventory/carton/jhonson" element={<Navigate to="/inventory/carton" replace />} />
+            <Route path="/inventory/carton" element={<CartonManager />} />
+            <Route path="/inventory/core/bell" element={<Navigate to="/inventory/core" replace />} />
+            <Route path="/inventory/core/race" element={<Navigate to="/inventory/core" replace />} />
+            <Route path="/inventory/core/tesco" element={<Navigate to="/inventory/core" replace />} />
+            <Route path="/inventory/core/jhonson" element={<Navigate to="/inventory/core" replace />} />
+            <Route path="/inventory/core" element={<CoreManager />} />
             <Route path="/billing/sale" element={<SaleInvoice />} />
             <Route path="/billing/purchase" element={<PurchaseInvoice />} />
             <Route path="/billing/saved" element={<SavedBills />} />
