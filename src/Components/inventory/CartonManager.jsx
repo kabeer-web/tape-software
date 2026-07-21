@@ -12,7 +12,12 @@ const LOW = 20;
 
 export default function CartonManager() {
   const { brand: brandParam } = useParams();
-  const BRAND = decodeURIComponent(brandParam || '');
+  // decodeURIComponent throws (not returns undefined) on a malformed URI —
+  // that was silently blanking this whole page with no visible error if a
+  // brand name ever had a stray "%" or similar in it. Fall back to the raw
+  // param instead of crashing.
+  let BRAND = brandParam || '';
+  try { BRAND = decodeURIComponent(brandParam || ''); } catch { /* keep raw brandParam */ }
   const { inventory, upsertStock, updateStock, removeItem, loading, cartonSizeOptions } = useContext(StockContext);
 
   const [cartonType, setCartonType] = useState('');
