@@ -207,6 +207,12 @@ export const addBrand = async (name) => {
   return mapId(data);
 };
 
+export const updateBrand = async (id, name) => {
+  const { data, error } = await supabase.from('brands').update({ name: name.trim() }).eq('id', id).select().single();
+  if (error) throw new Error(error.message);
+  return mapId(data);
+};
+
 export const deleteBrand = async (id) => {
   const { error } = await supabase.from('brands').delete().eq('id', id);
   if (error) throw new Error(error.message);
