@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useContext, useRef } from 'react';
-import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory, logActivity, getBrands, addBrand, updateBrand, deleteBrand, getSpecOptions, addSpecOption, deleteSpecOption } from '../../api';
+import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory, logActivity, getBrands, addBrand, updateBrand, deleteBrand } from '../../api';
 import { supabase } from '../../supabase';
 
 // Display/search helpers — exported here (not a separate file) since every
@@ -170,47 +170,11 @@ export const StockProvider = ({ children }) => {
     }
   };
 
-  // ── Spec options (Ply, Carton Size) ─────────────────────
-  // Was 7 hardcoded arrays scattered across CoreManager, CartonManager,
-  // Production, PurchaseInvoice, SaleInvoice, CartonStock — one table now
-  // (see 004_spec_options.sql), managed from the Sidebar.
-  const [specOptions, setSpecOptions] = useState([]);
-  useEffect(() => {
-    getSpecOptions().then(setSpecOptions).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    const channelName = `spec_options_live_${Math.random().toString(36).slice(2)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'spec_options' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          const row = { ...payload.new, _id: payload.new.id };
-          setSpecOptions(prev => prev.some(o => o._id === row._id) ? prev : [...prev, row]);
-        } else if (payload.eventType === 'DELETE') {
-          setSpecOptions(prev => prev.filter(o => o._id !== payload.old.id));
-        }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  const plyOptions       = specOptions.filter(o => o.type === 'ply').map(o => o.value).sort((a,b)=>Number(a)-Number(b));
-  const cartonSizeOptions = specOptions.filter(o => o.type === 'carton_size').map(o => o.value).sort((a,b)=>Number(a)-Number(b));
-
-  const addSpecOptionManual = async (type, value) => {
-    const clean = String(value).trim();
-    if (!clean) return;
-    if (specOptions.some(o => o.type === type && o.value === clean)) return;
-    const saved = await addSpecOption(type, clean);
-    setSpecOptions(prev => [...prev, saved]);
-    return saved;
-  };
-
-  const deleteSpecOptionManual = async (id) => {
-    await deleteSpecOption(id);
-    setSpecOptions(prev => prev.filter(o => o._id !== id));
-  };
+  // Ply / Carton Size — plain fixed lists, kept in each consuming file
+  // (CoreManager, CartonManager, Production, PurchaseInvoice, SaleInvoice,
+  // CartonStock) like before, exposed here too for convenience.
+  const plyOptions = ['5', '6', '8', '10'];
+  const cartonSizeOptions = ['10', '10.5', '11', '12'];
 
   // ✅ Add roll/item. Auto-generates a sequential roll number for Jambo
   // categories only. Retries on a rare concurrent-duplicate collision
@@ -430,7 +394,7 @@ export const StockProvider = ({ children }) => {
       adjustStock, addRoll, updateStock, removeItem, setInventory,
       issueYards, editItemYards, editItem, upsertStock, resetInventory,
       brands, addBrandManual, renameBrandManual, deleteBrandManual,
-      plyOptions, cartonSizeOptions, specOptions, addSpecOptionManual, deleteSpecOptionManual
+      plyOptions, cartonSizeOptions
     }}>
       {children}
     </StockContext.Provider>
