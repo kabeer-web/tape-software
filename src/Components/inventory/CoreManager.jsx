@@ -1,13 +1,12 @@
 import { useState, useContext } from 'react';
+import { useParams } from 'react-router-dom';
 import { StockContext } from './StockContext';
-import { PlusCircle, Trash2, AlertTriangle, Package, Plus, Minus, Tag, X } from 'lucide-react';
+import { PlusCircle, Trash2, AlertTriangle, Package, Plus, Minus } from 'lucide-react';
 
-// Replaces CORE BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx — those
-// each hardcoded one brand name into their own file, so a brand that didn't
-// exist yet meant creating a new file + route + sidebar entry. Here the
-// brand list comes from the `brands` table (StockContext) instead, so
-// adding a brand is just typing a name in the UI — no code change, and it
-// also auto-registers the moment it's used in a Purchase bill.
+// Same page every Core brand uses — which brand it's showing comes from the
+// URL (/inventory/core/:brand), and the brand itself is managed from the
+// Sidebar (add/rename/delete) instead of needing a new file per brand like
+// the old CORE BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx did.
 const LOW = 20;
 const PLY_OPTIONS  = ['5','6','8','10'];
 const SIDE_OPTIONS = [
@@ -16,10 +15,9 @@ const SIDE_OPTIONS = [
 ];
 
 export default function CoreManager() {
-  const { inventory, upsertStock, updateStock, removeItem, loading, brands, addBrandManual, deleteBrandManual } = useContext(StockContext);
-  const [activeBrand, setActiveBrand] = useState(null);
-  const [showAddBrand, setShowAddBrand] = useState(false);
-  const [newBrandName, setNewBrandName] = useState('');
+  const { brand: brandParam } = useParams();
+  const BRAND = decodeURIComponent(brandParam || '');
+  const { inventory, upsertStock, updateStock, removeItem, loading } = useContext(StockContext);
 
   const [filterSide, setFilterSide] = useState('');
   const [filterPly,  setFilterPly]  = useState('');
@@ -29,10 +27,8 @@ export default function CoreManager() {
   const [adjustVal,  setAdjustVal]  = useState({});
   const [msg,        setMsg]        = useState('');
 
-  const brand = activeBrand || brands[0]?.name || '';
-
   const filtered = inventory.filter(i =>
-    i.brand    === brand &&
+    i.brand    === BRAND &&
     i.category === 'Core' &&
     (filterSide==='' || i.side===filterSide) &&
     (filterPly ==='' || String(i.ply)===filterPly)
@@ -43,31 +39,10 @@ export default function CoreManager() {
 
   const flash = (t) => { setMsg(t); setTimeout(()=>setMsg(''),3000); };
 
-  const handleAddBrand = async () => {
-    const name = newBrandName.trim();
-    if (!name) return;
-    try {
-      await addBrandManual(name);
-      setActiveBrand(name);
-      setNewBrandName('');
-      setShowAddBrand(false);
-    } catch (e) { flash('❌ Brand add nahi hui: ' + e.message); }
-  };
-
-  const handleDeleteBrand = async (b) => {
-    const stockCount = inventory.filter(i => i.brand === b.name && i.category === 'Core').length;
-    if (!window.confirm(stockCount > 0
-      ? `"${b.name}" ke paas ${stockCount} stock entries hain — brand list se hata dein? (Stock khud delete nahi hoga.)`
-      : `"${b.name}" brand delete karna hai?`)) return;
-    await deleteBrandManual(b._id);
-    if (brand === b.name) setActiveBrand(null);
-  };
-
   const handleAdd = async (e) => {
     e.preventDefault();
-    if (!brand) { flash('❌ Pehle ek brand select/add karo'); return; }
     if (!addSide||!addPly||!addQty) { flash('❌ Sab fields fill karo'); return; }
-    await upsertStock({ brand, category:'Core', side:addSide, ply:addPly }, parseInt(addQty));
+    await upsertStock({ brand: BRAND, category:'Core', side:addSide, ply:addPly }, parseInt(addQty));
     setAddQty('');
     flash('✅ Core added!');
   };
@@ -86,11 +61,13 @@ export default function CoreManager() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-[#22c55e] font-bold">Loading...</div>;
 
+  if (!BRAND) return <div className="text-center py-16 text-gray-500">Sidebar se ek Core brand select karo.</div>;
+
   return (
     <div className="text-white min-h-screen">
       <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">CORE STOCK</h1>
-        <p className="text-gray-500 text-xs mt-1 uppercase tracking-widest">Core Stock Management — all brands</p>
+        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">{BRAND.toUpperCase()} CORE</h1>
+        <p className="text-gray-500 text-xs mt-1 uppercase tracking-widest">Core Stock Management</p>
       </div>
 
       {msg && (
@@ -99,36 +76,6 @@ export default function CoreManager() {
         </div>
       )}
 
-      {/* Brand switcher */}
-      <div className="bg-white/[0.03] p-4 rounded-2xl border border-[#22c55e]/20 mb-6 flex flex-wrap items-center gap-2">
-        <Tag size={16} className="text-[#22c55e] shrink-0"/>
-        {brands.length === 0 && <span className="text-xs text-gray-500">Koi brand nahi hai — pehle ek add karo.</span>}
-        {brands.map(b => (
-          <button key={b._id} onClick={() => setActiveBrand(b.name)}
-            className={`group flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition ${brand === b.name ? 'bg-[#22c55e] text-black' : 'bg-black/30 text-gray-400 hover:bg-black/40'}`}>
-            {b.name}
-            <span onClick={(e) => { e.stopPropagation(); handleDeleteBrand(b); }} className={`p-0.5 rounded-full ${brand === b.name ? 'hover:bg-black/20' : 'hover:bg-red-500/20 hover:text-red-400'}`}><X size={12}/></span>
-          </button>
-        ))}
-        {showAddBrand ? (
-          <div className="flex items-center gap-1.5">
-            <input autoFocus value={newBrandName} onChange={e=>setNewBrandName(e.target.value)}
-              onKeyDown={e=>{ if (e.key==='Enter') handleAddBrand(); if (e.key==='Escape') setShowAddBrand(false); }}
-              placeholder="Brand name..." className="bg-black/40 p-2 rounded-lg border border-[#22c55e]/40 outline-none text-sm w-32"/>
-            <button onClick={handleAddBrand} className="text-[#22c55e] p-1.5"><PlusCircle size={16}/></button>
-            <button onClick={()=>setShowAddBrand(false)} className="text-gray-500 p-1.5"><X size={16}/></button>
-          </div>
-        ) : (
-          <button onClick={()=>setShowAddBrand(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold border border-dashed border-[#22c55e]/30 text-[#22c55e]/70 hover:text-[#22c55e] hover:border-[#22c55e] transition">
-            <Plus size={14}/> New Brand
-          </button>
-        )}
-      </div>
-
-      {!brand ? (
-        <div className="text-center py-16 text-gray-500">Ek brand select ya add karo stock dekhne/add karne ke liye.</div>
-      ) : (
-      <>
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
@@ -163,7 +110,7 @@ export default function CoreManager() {
 
         {/* Add Form */}
         <form onSubmit={handleAdd} className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20 space-y-3">
-          <p className="text-xs text-gray-500 uppercase font-bold">Add Core Stock — {brand}</p>
+          <p className="text-xs text-gray-500 uppercase font-bold">Add Core Stock</p>
           <div className="grid grid-cols-2 gap-3">
             <select value={addSide} onChange={e=>setAddSide(e.target.value)} required className="bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
               <option value="">Select Side</option>
@@ -236,8 +183,6 @@ export default function CoreManager() {
           </tbody>
         </table>
       </div>
-      </>
-      )}
     </div>
   );
 }
