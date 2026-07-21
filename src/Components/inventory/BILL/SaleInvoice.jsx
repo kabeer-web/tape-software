@@ -50,7 +50,7 @@ const SIZE_MM       = ['720','900','1280','1600','2400'];
 const SIZE_INCH     = ['1/2"','1"','2"','3"','4"','6"','Custom'];
 const YARDS_LIST    = ['40','50','80','100','150','200'];
 const CARTON_BRANDS = ['Bell','Race','Tesco','Jhonson'];
-const CARTON_SIZES  = ['10','10.5','11','12'];
+// Carton sizes now come live from StockContext.cartonSizeOptions (managed in Sidebar).
 
 const emptyItem   = { sizeUnit:'mm', sizeMm:'', sizeInch:'', yards:'', colour:'', brand:'', micron:'', totalCarton:'', perCtnQty:'', rate:'' };
 const emptyCartonRow = { brand:'', type:'Small', size:'10', qty:'' };
@@ -182,7 +182,7 @@ export const generateInvoiceHTML = (bill) => {
 
 const SaleInvoice = () => {
   const { saveBill, postLedger, bills, ledger, parties }      = useAccounts();
-  const { inventory, updateStock }    = useContext(StockContext);
+  const { inventory, updateStock, cartonSizeOptions }    = useContext(StockContext);
 
   const [savedDraft] = useState(loadSaleDraft); // read once, on mount only
   const [showDraftBanner, setShowDraftBanner] = useState(() =>
@@ -477,7 +477,7 @@ const SaleInvoice = () => {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <select value={cartonForm.brand} onChange={e => updCartonForm('brand', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"><option value="">Select Brand</option>{CARTON_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}</select>
           <select value={cartonForm.type} onChange={e => updCartonForm('type', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"><option value="Small">Small</option><option value="Large">Large</option></select>
-          <select value={cartonForm.size} onChange={e => updCartonForm('size', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none">{CARTON_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}</select>
+          <select value={cartonForm.size} onChange={e => updCartonForm('size', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none">{cartonSizeOptions.map(s => <option key={s} value={s}>{s}"</option>)}</select>
           <input type="number" value={cartonForm.qty} onChange={e => updCartonForm('qty', e.target.value)} placeholder="Qty to minus" className="bg-black/30 p-3 rounded-xl border border-yellow-500/10 text-sm outline-none"/>
           <div className="flex gap-2">
             <button onClick={addOrUpdateCartonRow} className="flex-1 bg-yellow-500 text-black font-black text-xs uppercase rounded-xl px-3 py-3 hover:bg-yellow-400 transition flex items-center justify-center gap-1.5">
