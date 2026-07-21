@@ -14,7 +14,7 @@ import {
 // Core brand list used to be hardcoded here — now it comes live from the
 // `brands` table (StockContext), so a brand added/renamed in the Sidebar
 // shows up here too without needing a code change.
-const PLY_OPTIONS  = ['5', '6', '8', '10'];
+// Ply options now come live from StockContext.plyOptions (managed in Sidebar).
 
 // Jambo categories list (StockContext wali)
 const JAMBO_CATS = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam','Lemon'];
@@ -30,19 +30,38 @@ const emptyForm = {
   coreSide: '', coreBrand: '', corePly: '', coreQty: '', yardsPerCore: '',
 };
 
+// Same fix as Sale/Purchase Invoice: navigating to another page mid-entry
+// (e.g. checking a Jambo roll's stock) used to lose whatever was typed here.
+const PRODUCTION_DRAFT_KEY = 'hs_production_draft_v1';
+const loadProductionDraft = () => {
+  try {
+    const raw = localStorage.getItem(PRODUCTION_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
+
 const Production = () => {
-  const { inventory, adjustStock, refreshInventory, brands } = useContext(StockContext);
-  const [form, setForm] = useState(emptyForm);
+  const { inventory, adjustStock, refreshInventory, brands, plyOptions } = useContext(StockContext);
+  const [savedDraft] = useState(loadProductionDraft); // read once, on mount only
+  const [form, setForm] = useState(savedDraft?.form || emptyForm);
   const [productions, setProductions] = useState([]);
   const [pgLoad, setPgLoad] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('entry');
   const [msg, setMsg] = useState({ text: '', ok: true });
-  const [rollInput, setRollInput] = useState('');
+  const [rollInput, setRollInput] = useState(savedDraft?.rollInput || '');
   const [rollFound, setRollFound] = useState(null);
   const [rollErr, setRollErr] = useState('');
   const [rollLoading, setRollLoading] = useState(false);
   const [logSearch, setLogSearch] = useState('');
+
+  // Mirror the in-progress entry to localStorage on every change, so
+  // switching pages (e.g. to double-check a Jambo roll) and coming back
+  // restores exactly where it was left.
+  useEffect(() => {
+    const draft = { form, rollInput };
+    try { localStorage.setItem(PRODUCTION_DRAFT_KEY, JSON.stringify(draft)); } catch { /* storage full/unavailable — draft just won't persist */ }
+  }, [form, rollInput]);
 
   useEffect(() => {
     getProductions()
@@ -176,6 +195,7 @@ const handleSearch = async () => {
         label: `Production logged — Roll #${displayRoll(record.roll_no)} (${record.jambo_type}), ${record.core_qty_used} ${record.core_brand} core, ${record.yards_used} yards used`,
       });
       flash(`✅ Success: Recorded ${totalYards} yds from Roll #${displayRoll(record.roll_no)}`);
+      try { localStorage.removeItem(PRODUCTION_DRAFT_KEY); } catch {}
       setForm(emptyForm); clearRoll(); setTab('history');
     } catch (err) { 
       flash('❌ Error: ' + err.message, false); 
@@ -404,7 +424,7 @@ const handleSearch = async () => {
                     <InputLabel>Core Ply</InputLabel>
                     <select value={form.corePly} onChange={e => upd('corePly', e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold text-sm cursor-pointer">
                       <option value="">Select Ply</option>
-                      {PLY_OPTIONS.map(p => <option key={p} value={p}>{p} Ply</option>)}
+                      {plyOptions.map(p => <option key={p} value={p}>{p} Ply</option>)}
                     </select>
                   </div>
                   <div><InputLabel>Quantity (Pcs)</InputLabel><input type="number" value={form.coreQty} onChange={e => upd('coreQty', e.target.value)} placeholder="0" className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold" /></div>
@@ -513,7 +533,7 @@ const handleSearch = async () => {
                                 {['D/S', 'S/S'].map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                               <select value={editRow.core_ply} onChange={e => setEditRow(r => ({ ...r, core_ply: e.target.value }))} className="bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-xs">
-                                {PLY_OPTIONS.map(pl => <option key={pl} value={pl}>{pl} Ply</option>)}
+                                {plyOptions.map(pl => <option key={pl} value={pl}>{pl} Ply</option>)}
                               </select>
                             </div>
                           </div>
