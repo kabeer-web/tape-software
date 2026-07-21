@@ -1,18 +1,19 @@
 import { useState, useContext } from 'react';
+import { useParams } from 'react-router-dom';
 import { StockContext } from './StockContext';
-import { PlusCircle, AlertTriangle, Package, Trash2, Plus, Tag, X } from 'lucide-react';
+import { PlusCircle, AlertTriangle, Package, Trash2 } from 'lucide-react';
 
-// Replaces CARTON BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx — same
-// fix as CoreManager.jsx: brand list comes from the `brands` table
-// (StockContext) instead of one hardcoded name per file.
+// Same page every Carton brand uses — which brand it's showing comes from
+// the URL (/inventory/carton/:brand), managed from the Sidebar (add/rename/
+// delete) instead of a file per brand like the old CARTON BRANDS/bell.jsx,
+// race.jsx, tesco.jsx, jhonson.jsx did.
 const LOW = 20;
-const SIZES = [10, 10.5, 11, 12];
+// Carton sizes now come live from StockContext.cartonSizeOptions (managed in Sidebar).
 
 export default function CartonManager() {
-  const { inventory, upsertStock, updateStock, removeItem, loading, brands, addBrandManual, deleteBrandManual } = useContext(StockContext);
-  const [activeBrand, setActiveBrand] = useState(null);
-  const [showAddBrand, setShowAddBrand] = useState(false);
-  const [newBrandName, setNewBrandName] = useState('');
+  const { brand: brandParam } = useParams();
+  const BRAND = decodeURIComponent(brandParam || '');
+  const { inventory, upsertStock, updateStock, removeItem, loading, cartonSizeOptions } = useContext(StockContext);
 
   const [cartonType, setCartonType] = useState('');
   const [size, setSize] = useState('');
@@ -20,11 +21,10 @@ export default function CartonManager() {
   const [adjustValue, setAdjustValue] = useState({});
   const [msg, setMsg] = useState('');
 
-  const brand = activeBrand || brands[0]?.name || '';
   const flash = (t) => { setMsg(t); setTimeout(()=>setMsg(''),3000); };
 
   const filtered = inventory.filter(i =>
-    i.brand === brand &&
+    i.brand === BRAND &&
     i.category === 'Carton' &&
     (cartonType === '' || i.carton_type === cartonType || i.cartonType === cartonType) &&
     (size === '' || String(i.size) === size)
@@ -33,33 +33,12 @@ export default function CartonManager() {
   const totalQty = filtered.reduce((s, i) => s + (Number(i.qty) || 0), 0);
   const lowCount = filtered.filter(i => Number(i.qty) < LOW).length;
 
-  const handleAddBrand = async () => {
-    const name = newBrandName.trim();
-    if (!name) return;
-    try {
-      await addBrandManual(name);
-      setActiveBrand(name);
-      setNewBrandName('');
-      setShowAddBrand(false);
-    } catch (e) { flash('❌ Brand add nahi hui: ' + e.message); }
-  };
-
-  const handleDeleteBrand = async (b) => {
-    const stockCount = inventory.filter(i => i.brand === b.name && i.category === 'Carton').length;
-    if (!window.confirm(stockCount > 0
-      ? `"${b.name}" ke paas ${stockCount} stock entries hain — brand list se hata dein? (Stock khud delete nahi hoga.)`
-      : `"${b.name}" brand delete karna hai?`)) return;
-    await deleteBrandManual(b._id);
-    if (brand === b.name) setActiveBrand(null);
-  };
-
   const handleAdd = async (e) => {
     e.preventDefault();
-    if (!brand) { flash('❌ Pehle ek brand select/add karo'); return; }
     if (!cartonType || !size || !qty) return;
     try {
       await upsertStock({
-        brand,
+        brand: BRAND,
         category: 'Carton',
         carton_type: cartonType,
         size: String(size),
@@ -78,11 +57,13 @@ export default function CartonManager() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-[#22c55e] font-bold animate-pulse">Loading Carton Stock...</div>;
 
+  if (!BRAND) return <div className="text-center py-16 text-gray-500">Sidebar se ek Carton brand select karo.</div>;
+
   return (
     <div className="text-white min-h-screen">
       <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">CARTON STOCK</h1>
-        <p className="text-gray-500 text-xs mt-1 tracking-widest uppercase">Carton Inventory & Box Stock — all brands</p>
+        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">{BRAND.toUpperCase()} CARTONS</h1>
+        <p className="text-gray-500 text-xs mt-1 tracking-widest uppercase">Carton Inventory & Box Stock</p>
       </div>
 
       {msg && (
@@ -91,36 +72,6 @@ export default function CartonManager() {
         </div>
       )}
 
-      {/* Brand switcher */}
-      <div className="bg-white/[0.03] p-4 rounded-2xl border border-[#22c55e]/20 mb-6 flex flex-wrap items-center gap-2">
-        <Tag size={16} className="text-[#22c55e] shrink-0"/>
-        {brands.length === 0 && <span className="text-xs text-gray-500">Koi brand nahi hai — pehle ek add karo.</span>}
-        {brands.map(b => (
-          <button key={b._id} onClick={() => setActiveBrand(b.name)}
-            className={`group flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition ${brand === b.name ? 'bg-[#22c55e] text-black' : 'bg-black/30 text-gray-400 hover:bg-black/40'}`}>
-            {b.name}
-            <span onClick={(e) => { e.stopPropagation(); handleDeleteBrand(b); }} className={`p-0.5 rounded-full ${brand === b.name ? 'hover:bg-black/20' : 'hover:bg-red-500/20 hover:text-red-400'}`}><X size={12}/></span>
-          </button>
-        ))}
-        {showAddBrand ? (
-          <div className="flex items-center gap-1.5">
-            <input autoFocus value={newBrandName} onChange={e=>setNewBrandName(e.target.value)}
-              onKeyDown={e=>{ if (e.key==='Enter') handleAddBrand(); if (e.key==='Escape') setShowAddBrand(false); }}
-              placeholder="Brand name..." className="bg-black/40 p-2 rounded-lg border border-[#22c55e]/40 outline-none text-sm w-32"/>
-            <button onClick={handleAddBrand} className="text-[#22c55e] p-1.5"><PlusCircle size={16}/></button>
-            <button onClick={()=>setShowAddBrand(false)} className="text-gray-500 p-1.5"><X size={16}/></button>
-          </div>
-        ) : (
-          <button onClick={()=>setShowAddBrand(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold border border-dashed border-[#22c55e]/30 text-[#22c55e]/70 hover:text-[#22c55e] hover:border-[#22c55e] transition">
-            <Plus size={14}/> New Brand
-          </button>
-        )}
-      </div>
-
-      {!brand ? (
-        <div className="text-center py-16 text-gray-500">Ek brand select ya add karo stock dekhne/add karne ke liye.</div>
-      ) : (
-      <>
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
           <div className="p-2 bg-[#22c55e]/10 rounded-lg"><Package className="text-[#22c55e]" size={22} /></div>
@@ -147,13 +98,13 @@ export default function CartonManager() {
             </select>
             <select value={size} onChange={e => setSize(e.target.value)} className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
               <option value="">All Sizes</option>
-              {SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
+              {cartonSizeOptions.map(s => <option key={s} value={s}>{s}"</option>)}
             </select>
           </div>
         </div>
 
         <form onSubmit={handleAdd} className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20 space-y-3">
-          <p className="text-xs text-gray-500 uppercase font-bold">Add Box Stock — {brand}</p>
+          <p className="text-xs text-gray-500 uppercase font-bold">Add Box Stock</p>
           <div className="grid grid-cols-2 gap-3">
             <select value={cartonType} onChange={e => setCartonType(e.target.value)} required className="bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
               <option value="">Type</option>
@@ -162,7 +113,7 @@ export default function CartonManager() {
             </select>
             <select value={size} onChange={e => setSize(e.target.value)} required className="bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
               <option value="">Size</option>
-              {SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
+              {cartonSizeOptions.map(s => <option key={s} value={s}>{s}"</option>)}
             </select>
           </div>
           <div className="flex gap-3">
@@ -225,8 +176,6 @@ export default function CartonManager() {
           </tbody>
         </table>
       </div>
-      </>
-      )}
     </div>
   );
 }
