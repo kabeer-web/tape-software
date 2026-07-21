@@ -219,28 +219,6 @@ export const deleteBrand = async (id) => {
   return true;
 };
 
-// ─── SPEC OPTIONS API (Ply, Carton Size) ──────────────────
-// Was 7 hardcoded arrays across CoreManager/CartonManager/Production/
-// PurchaseInvoice/SaleInvoice/CartonStock — one table now, see
-// 004_spec_options.sql.
-export const getSpecOptions = async () => {
-  const { data, error } = await supabase.from('spec_options').select('*').order('value');
-  if (error) throw new Error(error.message);
-  return mapId(data);
-};
-
-export const addSpecOption = async (type, value) => {
-  const { data, error } = await supabase.from('spec_options').insert([{ type, value: String(value).trim() }]).select().single();
-  if (error) throw new Error(error.message);
-  return mapId(data);
-};
-
-export const deleteSpecOption = async (id) => {
-  const { error } = await supabase.from('spec_options').delete().eq('id', id);
-  if (error) throw new Error(error.message);
-  return true;
-};
-
 export const deleteProduction = async (id) => {
   const { error } = await supabase.from('productions').delete().eq('id', id);
   if (error) throw new Error(error.message);
