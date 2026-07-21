@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useContext, useRef } from 'react';
-import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory, logActivity, getBrands, addBrand, deleteBrand } from '../../api';
+import { getInventory, addInventory, updateInventory, deleteInventory, deleteAllInventory, logActivity, getBrands, addBrand, updateBrand, deleteBrand } from '../../api';
 import { supabase } from '../../supabase';
 
 // Display/search helpers — exported here (not a separate file) since every
@@ -133,6 +133,24 @@ export const StockProvider = ({ children }) => {
   const deleteBrandManual = async (id) => {
     await deleteBrand(id);
     setBrandsBoth(prev => prev.filter(b => b._id !== id));
+  };
+
+  // Renaming updates the brand record AND every inventory row currently
+  // using the old name (Core + Carton), so existing stock stays correctly
+  // linked to the brand instead of silently becoming "orphaned" under a
+  // name that no longer appears anywhere in the brand list.
+  const renameBrandManual = async (brandObj, newName) => {
+    const clean = newName.trim();
+    if (!clean || clean === brandObj.name) return;
+    const updated = await updateBrand(brandObj._id, clean);
+    setBrandsBoth(prev => prev.map(b => b._id === brandObj._id ? updated : b).sort((a,b)=>a.name.localeCompare(b.name)));
+
+    const affected = inventoryRef.current.filter(i => i.brand === brandObj.name);
+    for (const item of affected) {
+      await updateInventory(item._id || item.id, { brand: clean });
+    }
+    setInventory(prev => prev.map(i => i.brand === brandObj.name ? { ...i, brand: clean } : i));
+    return updated;
   };
 
   // Silently registers a brand the first time it's used (e.g. a Purchase
@@ -369,7 +387,7 @@ export const StockProvider = ({ children }) => {
       inventory, loading, refreshInventory,
       adjustStock, addRoll, updateStock, removeItem, setInventory,
       issueYards, editItemYards, editItem, upsertStock, resetInventory,
-      brands, addBrandManual, deleteBrandManual
+      brands, addBrandManual, renameBrandManual, deleteBrandManual
     }}>
       {children}
     </StockContext.Provider>
