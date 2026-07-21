@@ -11,7 +11,9 @@ import {
   TrendingDown, CheckCircle2, Calculator, Calendar, Layers 
 } from 'lucide-react';
 
-const CORE_BRANDS = ['Bell', 'Race', 'Tesco', 'Jhonson'];
+// Core brand list used to be hardcoded here — now it comes live from the
+// `brands` table (StockContext), so a brand added/renamed in the Sidebar
+// shows up here too without needing a code change.
 const PLY_OPTIONS  = ['5', '6', '8', '10'];
 
 // Jambo categories list (StockContext wali)
@@ -29,7 +31,7 @@ const emptyForm = {
 };
 
 const Production = () => {
-  const { inventory, adjustStock, refreshInventory } = useContext(StockContext);
+  const { inventory, adjustStock, refreshInventory, brands } = useContext(StockContext);
   const [form, setForm] = useState(emptyForm);
   const [productions, setProductions] = useState([]);
   const [pgLoad, setPgLoad] = useState(true);
@@ -387,7 +389,7 @@ const handleSearch = async () => {
                     <InputLabel>Core Brand</InputLabel>
                     <select value={form.coreBrand} onChange={e => upd('coreBrand', e.target.value)} className="w-full bg-black/40 p-4 rounded-2xl border border-white/10 outline-none focus:border-[#10b981] font-bold text-sm cursor-pointer">
                       <option value="">Select Brand</option>
-                      {CORE_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+                      {brands.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
                     </select>
                   </div>
                   <div>
@@ -504,7 +506,7 @@ const handleSearch = async () => {
                         {isEditingRow ? (
                           <div className="flex flex-col gap-1.5">
                             <select value={editRow.core_brand} onChange={e => setEditRow(r => ({ ...r, core_brand: e.target.value }))} className="bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-xs">
-                              {CORE_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+                              {brands.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
                             </select>
                             <div className="flex gap-1.5">
                               <select value={editRow.core_side} onChange={e => setEditRow(r => ({ ...r, core_side: e.target.value }))} className="bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-xs">
