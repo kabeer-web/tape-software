@@ -75,6 +75,23 @@ const AddBrandRow = ({ isAdding, value, setValue, onStart, onCancel, onSave }) =
   );
 };
 
+const SpecRow = ({ option, onDelete }) => {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-1 py-1 px-1 group">
+      <span className="text-xs text-gray-400">{option.value}</span>
+      {confirmingDelete ? (
+        <div className="flex items-center gap-1">
+          <button onClick={onDelete} title="Confirm delete" className="text-red-500 hover:text-red-400 p-1"><Check size={11} /></button>
+          <button onClick={() => setConfirmingDelete(false)} title="Cancel" className="text-gray-500 hover:text-gray-300 p-1"><X size={11} /></button>
+        </div>
+      ) : (
+        <button onClick={() => setConfirmingDelete(true)} title="Delete" className="text-gray-600 hover:text-red-500 p-1 opacity-60 group-hover:opacity-100 transition"><Trash2 size={11} /></button>
+      )}
+    </div>
+  );
+};
+
 const Sidebar = ({ onClose = () => {} }) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
@@ -86,7 +103,7 @@ const Sidebar = ({ onClose = () => {} }) => {
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
 
-  const { brands, addBrandManual, renameBrandManual, deleteBrandManual } = useContext(StockContext);
+  const { brands, addBrandManual, renameBrandManual, deleteBrandManual, specOptions, addSpecOptionManual, deleteSpecOptionManual } = useContext(StockContext);
 
   // Add/rename-brand inline UI state (shared by both the Core and Carton
   // submenus below, since brand names are the same list for both).
@@ -112,6 +129,23 @@ const Sidebar = ({ onClose = () => {} }) => {
   const handleDeleteBrand = async (b) => {
     if (!window.confirm(`"${b.name}" brand delete karna hai? (Stock khud delete nahi hoga.)`)) return;
     try { await deleteBrandManual(b._id); } catch (e) { console.error(e); }
+  };
+
+  // Ply / Carton Size options — same "manage from UI" pattern as brands.
+  const [isSpecsOpen, setIsSpecsOpen] = useState(false);
+  const [addingSpecType, setAddingSpecType] = useState(null); // 'ply' | 'carton_size' | null
+  const [newSpecValue, setNewSpecValue] = useState('');
+
+  const handleAddSpec = async () => {
+    const val = newSpecValue.trim();
+    if (!val || !addingSpecType) return;
+    try { await addSpecOptionManual(addingSpecType, val); } catch (e) { console.error(e); }
+    setNewSpecValue('');
+    setAddingSpecType(null);
+  };
+  const handleDeleteSpec = async (opt) => {
+    if (!window.confirm(`"${opt.value}" delete karna hai?`)) return;
+    try { await deleteSpecOptionManual(opt._id); } catch (e) { console.error(e); }
   };
 
   const jamboFiles = [
@@ -275,6 +309,40 @@ const Sidebar = ({ onClose = () => {} }) => {
                     onStart={() => setAddingBrandFor('core')} onCancel={() => { setAddingBrandFor(null); setNewBrandName(''); }} onSave={handleAddBrand} />
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Ply / Carton Size — shared dropdown options used across Core,
+            Carton, Production, and both Invoices. Manage once here instead
+            of editing 7 different files. */}
+        <div>
+          <button onClick={() => setIsSpecsOpen(!isSpecsOpen)} className="flex items-center justify-between w-full text-sm font-bold text-gray-300 hover:text-[#22c55e] py-2 px-2 rounded-lg hover:bg-white/5 transition">
+            <span className="flex items-center gap-2"><Settings size={16} /> Spec Options</span>
+            {isSpecsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+          {isSpecsOpen && (
+            <div className="ml-2 pl-3 border-l border-[#22c55e]/10 mt-1 space-y-3">
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase font-bold px-1 mb-1">Ply</p>
+                <div className="flex flex-col gap-0.5">
+                  {specOptions.filter(o => o.type === 'ply').map(o => (
+                    <SpecRow key={o._id} option={o} onDelete={() => handleDeleteSpec(o)} />
+                  ))}
+                  <AddBrandRow isAdding={addingSpecType==='ply'} value={newSpecValue} setValue={setNewSpecValue}
+                    onStart={() => setAddingSpecType('ply')} onCancel={() => { setAddingSpecType(null); setNewSpecValue(''); }} onSave={handleAddSpec} />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase font-bold px-1 mb-1">Carton Size</p>
+                <div className="flex flex-col gap-0.5">
+                  {specOptions.filter(o => o.type === 'carton_size').map(o => (
+                    <SpecRow key={o._id} option={o} onDelete={() => handleDeleteSpec(o)} />
+                  ))}
+                  <AddBrandRow isAdding={addingSpecType==='carton_size'} value={newSpecValue} setValue={setNewSpecValue}
+                    onStart={() => setAddingSpecType('carton_size')} onCancel={() => { setAddingSpecType(null); setNewSpecValue(''); }} onSave={handleAddSpec} />
+                </div>
+              </div>
             </div>
           )}
         </div>
