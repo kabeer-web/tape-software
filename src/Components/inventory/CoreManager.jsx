@@ -8,7 +8,7 @@ import { PlusCircle, Trash2, AlertTriangle, Package, Plus, Minus } from 'lucide-
 // Sidebar (add/rename/delete) instead of needing a new file per brand like
 // the old CORE BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx did.
 const LOW = 20;
-const PLY_OPTIONS  = ['5','6','8','10'];
+// Ply options now come live from StockContext.plyOptions (managed in Sidebar).
 const SIDE_OPTIONS = [
   { val:'Single', label:'Single (S/S)' },
   { val:'Double', label:'Double (D/S)' },
@@ -17,7 +17,7 @@ const SIDE_OPTIONS = [
 export default function CoreManager() {
   const { brand: brandParam } = useParams();
   const BRAND = decodeURIComponent(brandParam || '');
-  const { inventory, upsertStock, updateStock, removeItem, loading } = useContext(StockContext);
+  const { inventory, upsertStock, updateStock, removeItem, loading, plyOptions } = useContext(StockContext);
 
   const [filterSide, setFilterSide] = useState('');
   const [filterPly,  setFilterPly]  = useState('');
@@ -103,7 +103,7 @@ export default function CoreManager() {
             </select>
             <select value={filterPly} onChange={e=>setFilterPly(e.target.value)} className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
               <option value="">All Ply</option>
-              {PLY_OPTIONS.map(p=><option key={p} value={p}>{p} Ply</option>)}
+              {plyOptions.map(p=><option key={p} value={p}>{p} Ply</option>)}
             </select>
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function CoreManager() {
             </select>
             <select value={addPly} onChange={e=>setAddPly(e.target.value)} required className="bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
               <option value="">Select Ply</option>
-              {PLY_OPTIONS.map(p=><option key={p} value={p}>{p} Ply</option>)}
+              {plyOptions.map(p=><option key={p} value={p}>{p} Ply</option>)}
             </select>
           </div>
           <div className="flex gap-3">
