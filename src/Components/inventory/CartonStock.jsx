@@ -1,151 +1,181 @@
 import { useState, useContext } from 'react';
-import { StockContext } from "./StockContext";
-import { Search, Layers, Package, AlertTriangle } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { StockContext } from './StockContext';
+import { PlusCircle, AlertTriangle, Package, Trash2 } from 'lucide-react';
 
-const LOW_STOCK_THRESHOLD = 20;
-const CARTON_SIZES = [10, 10.5, 11, 12];
+// Same page every Carton brand uses — which brand it's showing comes from
+// the URL (/inventory/carton/:brand), managed from the Sidebar (add/rename/
+// delete) instead of a file per brand like the old CARTON BRANDS/bell.jsx,
+// race.jsx, tesco.jsx, jhonson.jsx did.
+const LOW = 20;
+const SIZES = [10, 10.5, 11, 12];
 
-const CartonStock = () => {
-  const { inventory } = useContext(StockContext);
+export default function CartonManager() {
+  const { brand: brandParam } = useParams();
+  const BRAND = decodeURIComponent(brandParam || '');
+  const { inventory, upsertStock, updateStock, removeItem, loading } = useContext(StockContext);
 
-  const [cartonSearch, setCartonSearch] = useState('');
-  const [filterBrand, setFilterBrand] = useState('All');
-  const [filterType, setFilterType] = useState('All');
-  const [filterSize, setFilterSize] = useState('All');
+  const [cartonType, setCartonType] = useState('');
+  const [size, setSize] = useState('');
+  const [qty, setQty] = useState('');
+  const [adjustValue, setAdjustValue] = useState({});
+  const [msg, setMsg] = useState('');
 
-  const cartonRaw = inventory.filter(i => i.category === 'Carton');
+  const flash = (t) => { setMsg(t); setTimeout(()=>setMsg(''),3000); };
 
-  // Brand + Type + Size ke hisaab se group karo
-  const cartonGrouped = cartonRaw.reduce((acc, curr) => {
-    const key = `${curr.brand}-${curr.type}-${curr.size}`;
-    if (!acc[key]) acc[key] = { ...curr, totalQty: 0 };
-    acc[key].totalQty += Number(curr.qty || 0);
-    if (!acc[key].date || new Date(curr.date) > new Date(acc[key].date)) {
-      acc[key].date = curr.date;
+  const filtered = inventory.filter(i =>
+    i.brand === BRAND &&
+    i.category === 'Carton' &&
+    (cartonType === '' || i.carton_type === cartonType || i.cartonType === cartonType) &&
+    (size === '' || String(i.size) === size)
+  );
+
+  const totalQty = filtered.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+  const lowCount = filtered.filter(i => Number(i.qty) < LOW).length;
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!cartonType || !size || !qty) return;
+    try {
+      await upsertStock({
+        brand: BRAND,
+        category: 'Carton',
+        carton_type: cartonType,
+        size: String(size),
+      }, Number(qty));
+      setQty('');
+      flash('✅ Carton added!');
+    } catch (err) {
+      flash('❌ Error adding stock');
     }
-    return acc;
-  }, {});
+  };
 
-  const allBrands = [...new Set(cartonRaw.map(i => i.brand))];
+  const handleRemove = (id) => {
+    if (!window.confirm('Pakka remove karna hai?')) return;
+    removeItem(id);
+  };
 
-  const filteredCartons = Object.values(cartonGrouped).filter(i => {
-    const matchesDropdowns =
-      (filterBrand === 'All' || i.brand === filterBrand) &&
-      (filterType === 'All' || i.type === filterType) &&
-      (filterSize === 'All' || String(i.size) === filterSize);
+  if (loading) return <div className="flex items-center justify-center h-64 text-[#22c55e] font-bold animate-pulse">Loading Carton Stock...</div>;
 
-    if (!matchesDropdowns) return false;
-    if (cartonSearch.trim() === '') return true;
-
-    const haystack = `${i.brand} ${i.type} ${i.size}`.toLowerCase();
-    const tokens = cartonSearch.toLowerCase().trim().split(/\s+/);
-    return tokens.every(token => haystack.includes(token));
-  });
-
-  const totalCartonQty = filteredCartons.reduce((sum, i) => sum + i.totalQty, 0);
-  const totalCombinations = filteredCartons.length;
+  if (!BRAND) return <div className="text-center py-16 text-gray-500">Sidebar se ek Carton brand select karo.</div>;
 
   return (
-    <div className="p-8 bg-[#070707] text-white min-h-screen">
-      <h1 className="text-3xl font-black mb-8">CARTON <span className="text-[#22c55e]">STOCK</span></h1>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-[#22c55e]/20 rounded-2xl p-5 flex items-center gap-4">
-          <Package className="text-[#22c55e]" size={28} />
-          <div>
-            <p className="text-2xl font-black text-[#22c55e]">{totalCartonQty}</p>
-            <p className="text-xs text-gray-500 uppercase">Total Cartons</p>
-          </div>
-        </div>
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-[#22c55e]/20 rounded-2xl p-5 flex items-center gap-4">
-          <Layers className="text-[#22c55e]" size={28} />
-          <div>
-            <p className="text-2xl font-black text-[#22c55e]">{totalCombinations}</p>
-            <p className="text-xs text-gray-500 uppercase">Combinations</p>
-          </div>
-        </div>
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-[#22c55e]/20 rounded-2xl p-5 flex items-center gap-4 col-span-2 md:col-span-1">
-          <AlertTriangle className="text-yellow-500" size={28} />
-          <div>
-            <p className="text-2xl font-black text-yellow-500">
-              {filteredCartons.filter(i => i.totalQty < LOW_STOCK_THRESHOLD).length}
-            </p>
-            <p className="text-xs text-gray-500 uppercase">Low Stock Alerts</p>
-          </div>
-        </div>
+    <div className="text-white min-h-screen">
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-black text-[#22c55e]">{BRAND.toUpperCase()} CARTONS</h1>
+        <p className="text-gray-500 text-xs mt-1 tracking-widest uppercase">Carton Inventory & Box Stock</p>
       </div>
 
-      {/* Search + Filters */}
-      <div className="bg-white/[0.03] backdrop-blur-xl p-5 rounded-2xl border border-[#22c55e]/10 mb-6">
-        <div className="relative mb-4">
-          <Search className="absolute left-4 top-3.5 text-gray-500" size={18} />
-          <input
-            value={cartonSearch}
-            onChange={(e) => setCartonSearch(e.target.value)}
-            placeholder='Search e.g. "bell large" or "race 11"'
-            className="w-full pl-11 p-3 bg-black/30 rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e]/50 transition"
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-3 mb-4">
-          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20">
-            <option value="All">All Brands</option>
-            {allBrands.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20">
-            <option value="All">All Sizes</option>
-            {CARTON_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
-          </select>
-        </div>
-
-        <div>
-          <p className="text-[11px] text-gray-500 uppercase font-bold mb-2">Type</p>
-          <div className="flex gap-2">
-            {['All', 'Small', 'Large'].map(t => (
-              <button
-                key={t}
-                onClick={() => setFilterType(t)}
-                className={`px-4 py-2 rounded-xl text-sm font-bold border transition ${
-                  filterType === t
-                    ? 'bg-[#22c55e] text-black border-[#22c55e]'
-                    : 'bg-black/30 text-gray-400 border-[#22c55e]/20 hover:border-[#22c55e]/50'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Result Cards */}
-      {filteredCartons.length === 0 ? (
-        <p className="text-gray-500 text-center py-10">No carton stock matches your search.</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCartons.map((i, idx) => {
-            const isLow = i.totalQty < LOW_STOCK_THRESHOLD;
-            return (
-              <div
-                key={idx}
-                className={`bg-white/[0.03] backdrop-blur-xl rounded-2xl p-5 border ${isLow ? 'border-red-500/40' : 'border-[#22c55e]/20'}`}
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <h3 className="font-black text-lg">{i.brand}</h3>
-                  {isLow && <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded-full font-bold">LOW STOCK</span>}
-                </div>
-                <p className="text-sm text-gray-400 font-mono mb-3">{i.type} &middot; {i.size}" size</p>
-                <p className={`text-3xl font-black ${isLow ? 'text-red-400' : 'text-[#22c55e]'}`}>{i.totalQty}</p>
-                <p className="text-xs text-gray-500 mt-1">Cartons in stock</p>
-                {i.date && <p className="text-[11px] text-gray-600 mt-3">Last updated: {i.date}</p>}
-              </div>
-            );
-          })}
+      {msg && (
+        <div className={`mb-4 p-3 rounded-xl text-sm font-bold border ${msg.startsWith('✅')?'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]':'bg-red-500/10 border-red-500/40 text-red-400'}`}>
+          {msg}
         </div>
       )}
+
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
+          <div className="p-2 bg-[#22c55e]/10 rounded-lg"><Package className="text-[#22c55e]" size={22} /></div>
+          <div><p className="text-xl font-black text-[#22c55e]">{filtered.length}</p><p className="text-[10px] text-gray-500 uppercase font-bold">Entries</p></div>
+        </div>
+        <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
+          <div className="p-2 bg-[#22c55e]/10 rounded-lg"><Package className="text-[#22c55e]" size={22} /></div>
+          <div><p className="text-xl font-black text-[#22c55e]">{totalQty}</p><p className="text-[10px] text-gray-500 uppercase font-bold">Total Stock</p></div>
+        </div>
+        <div className="bg-white/[0.03] border border-yellow-500/20 rounded-2xl p-4 flex items-center gap-3">
+          <div className="p-2 bg-yellow-500/10 rounded-lg"><AlertTriangle className="text-yellow-500" size={22} /></div>
+          <div><p className="text-xl font-black text-yellow-500">{lowCount}</p><p className="text-[10px] text-gray-500 uppercase font-bold">Low Alert</p></div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20">
+          <p className="text-xs text-gray-500 uppercase font-bold mb-3">Quick Filter</p>
+          <div className="flex gap-3">
+            <select value={cartonType} onChange={e => setCartonType(e.target.value)} className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
+              <option value="">All Types</option>
+              <option value="Small">Small</option>
+              <option value="Large">Large</option>
+            </select>
+            <select value={size} onChange={e => setSize(e.target.value)} className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
+              <option value="">All Sizes</option>
+              {SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
+            </select>
+          </div>
+        </div>
+
+        <form onSubmit={handleAdd} className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20 space-y-3">
+          <p className="text-xs text-gray-500 uppercase font-bold">Add Box Stock</p>
+          <div className="grid grid-cols-2 gap-3">
+            <select value={cartonType} onChange={e => setCartonType(e.target.value)} required className="bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
+              <option value="">Type</option>
+              <option value="Small">Small</option>
+              <option value="Large">Large</option>
+            </select>
+            <select value={size} onChange={e => setSize(e.target.value)} required className="bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm">
+              <option value="">Size</option>
+              {SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
+            </select>
+          </div>
+          <div className="flex gap-3">
+            <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="Quantity" required className="w-full bg-black/40 p-3 rounded-xl border border-[#22c55e]/20 outline-none text-sm" />
+            <button type="submit" className="bg-[#22c55e] px-8 rounded-xl font-black text-black hover:bg-[#1db954] transition-all flex items-center gap-2 text-xs">
+              <PlusCircle size={16} /> ADD STOCK
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="bg-white/[0.03] rounded-2xl border border-[#22c55e]/10 overflow-x-auto">
+        <table className="w-full text-left min-w-[500px]">
+          <thead className="bg-black/40 text-gray-500 text-[10px] uppercase font-black">
+            <tr>
+              <th className="p-4">Date</th>
+              <th className="p-4">Type</th>
+              <th className="p-4">Size</th>
+              <th className="p-4">Available Qty</th>
+              <th className="p-4 text-center">Adjust Stock</th>
+              <th className="p-4 text-right">Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={6} className="p-12 text-center text-gray-600 font-bold">No Carton Entries Found.</td></tr>
+            ) : filtered.map(item => {
+              const currentQty = Number(item.qty) || 0;
+              const isLow = currentQty < LOW;
+              return (
+                <tr key={item._id} className={`border-t border-white/5 hover:bg-white/[0.02] transition-all ${isLow ? 'bg-yellow-500/5' : ''}`}>
+                  <td className="p-4 text-xs text-gray-500 font-bold">{item.date}</td>
+                  <td className="p-4 text-sm font-bold uppercase tracking-widest">{item.carton_type || item.cartonType}</td>
+                  <td className="p-4 text-sm font-black">{item.size}"</td>
+                  <td className="p-4">
+                    <span className={`font-black text-sm px-3 py-1 rounded-lg ${isLow ? 'bg-yellow-500/20 text-yellow-500' : 'bg-[#22c55e]/10 text-[#22c55e]'}`}>
+                      {currentQty} PCS {isLow && <span className="ml-1 text-[8px] uppercase">Low</span>}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex justify-center items-center gap-2 animate-in slide-in-from-right-2">
+                      <input
+                        type="number"
+                        className="w-16 bg-black/40 p-2 text-center rounded-lg border border-[#22c55e]/20 outline-none text-xs font-bold"
+                        onChange={e => setAdjustValue(p => ({ ...p, [item._id]: parseInt(e.target.value) || 0 }))}
+                        placeholder="0"
+                      />
+                      <button onClick={() => updateStock(item._id, adjustValue[item._id] || 0)} className="p-2 bg-[#22c55e] text-black rounded-lg hover:scale-110 transition-transform"><PlusCircle size={14}/></button>
+                      <button onClick={() => updateStock(item._id, -(adjustValue[item._id] || 0))} className="p-2 bg-red-600 text-white rounded-lg hover:scale-110 transition-transform"><Trash2 size={14}/></button>
+                    </div>
+                  </td>
+                  <td className="p-4 text-right">
+                    <button onClick={() => handleRemove(item._id)} className="text-gray-600 hover:text-red-500 transition-colors p-2">
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
-};
-
-export default CartonStock;
+}
