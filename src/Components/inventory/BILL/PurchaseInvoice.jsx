@@ -8,8 +8,7 @@ import {
 
 const PURCHASE_PARTIES = ['UNIVERSAL COTTING','KOSHER','CHAWLA INDUSTRY','IBAD CORE','TAHSEEN CARTON','TALHA WASEEM','ASGHR CORE','DEER TAPE','SAMAD BHAI'];
 const JAMBO_CATEGORIES = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam','Lemon'];
-const CARTON_SIZES = ['10', '10.5', '11', '12'];
-const PLY_OPTIONS = ['5', '6', '8', '10'];
+// Ply / Carton size options now come live from StockContext (managed in Sidebar).
 // Brand list used to be hardcoded here — now it comes from the `brands`
 // table (StockContext) via the datalist near the item-entry form below.
 const ADDR = 'Karachi, Pakistan';
@@ -100,7 +99,7 @@ const loadPurchaseDraft = () => {
 const CATEGORY_ICON = { Core: Package, Carton: Box, Jambo: Layers };
 
 const PurchaseInvoice = () => {
-  const { addRoll, upsertStock, brands } = useContext(StockContext);
+  const { addRoll, upsertStock, brands, plyOptions, cartonSizeOptions } = useContext(StockContext);
   const { saveBill, postLedger, bills, ledger, parties } = useAccounts();
 
   const [savedDraft] = useState(loadPurchaseDraft); // read once, on mount only
@@ -314,7 +313,7 @@ const PurchaseInvoice = () => {
       </div>
 
       {/* Item entry card */}
-      <datalist id="brand-list">{Array.from(new Set([...(brands||[]).map(b=>b.name), 'Tesco','Bell','Race','Jhonson','STICK MASTER',])).map(b=><option key={b} value={b}/>)}</datalist>
+      <datalist id="brand-list">{Array.from(new Set([...(brands||[]).map(b=>b.name), 'Tesco','Bell','Race','Jhonson','Local','Imported'])).map(b=><option key={b} value={b}/>)}</datalist>
       <div className="bg-white/[0.03] p-6 rounded-[2rem] border border-[#22c55e]/20 mb-5">
         <div className="flex gap-2 mb-5">
           {['Core','Carton','Jambo'].map(cat => {
@@ -332,14 +331,14 @@ const PurchaseInvoice = () => {
             <>
               <input list="brand-list" value={form.brand} onChange={e=>setForm({...form, brand:e.target.value})} placeholder="Brand" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"/>
               <select value={form.side} onChange={e=>setForm({...form, side:e.target.value})} className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"><option value="">Side</option><option value="Single">Single</option><option value="Double">Double</option></select>
-              <select value={form.ply} onChange={e=>setForm({...form, ply:e.target.value})} className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"><option value="">Ply</option>{PLY_OPTIONS.map(p=><option key={p} value={p}>{p} Ply</option>)}</select>
+              <select value={form.ply} onChange={e=>setForm({...form, ply:e.target.value})} className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"><option value="">Ply</option>{plyOptions.map(p=><option key={p} value={p}>{p} Ply</option>)}</select>
             </>
           )}
           {form.mainCategory === 'Carton' && (
             <>
               <input list="brand-list" value={form.brand} onChange={e=>setForm({...form, brand:e.target.value})} placeholder="Brand" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"/>
               <select value={form.cartonType} onChange={e=>setForm({...form, cartonType:e.target.value})} className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"><option value="">Type</option><option value="Small">Small</option><option value="Large">Large</option></select>
-              <select value={form.size} onChange={e=>setForm({...form, size:e.target.value})} className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"><option value="">Size</option>{CARTON_SIZES.map(s=><option key={s} value={s}>{s}"</option>)}</select>
+              <select value={form.size} onChange={e=>setForm({...form, size:e.target.value})} className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"><option value="">Size</option>{cartonSizeOptions.map(s=><option key={s} value={s}>{s}"</option>)}</select>
             </>
           )}
           {form.mainCategory === 'Jambo' && (
