@@ -314,3 +314,5 @@ export const deleteActivityLog = async (id) => {
   if (error) throw new Error(error.message);
   return true;
 };
+
+  
