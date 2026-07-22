@@ -16,12 +16,7 @@ const SIDE_OPTIONS = [
 
 export default function CoreManager() {
   const { brand: brandParam } = useParams();
-  // decodeURIComponent throws (not returns undefined) on a malformed URI —
-  // that was silently blanking this whole page with no visible error if a
-  // brand name ever had a stray "%" or similar in it. Fall back to the raw
-  // param instead of crashing.
-  let BRAND = brandParam || '';
-  try { BRAND = decodeURIComponent(brandParam || ''); } catch { /* keep raw brandParam */ }
+  const BRAND = decodeURIComponent(brandParam || '');
   const { inventory, upsertStock, updateStock, removeItem, loading, plyOptions } = useContext(StockContext);
 
   const [filterSide, setFilterSide] = useState('');
