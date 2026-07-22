@@ -1,0 +1,14 @@
+[33m4664d08[m[33m ([m[1;31morigin/production[m[33m)[m prodcution
+[33m589679b[m Update Production.jsx
+[33m9ac6864[m Update Sidebar.jsx
+[33med6033e[m Update MasterSearch.jsx
+[33md049676[m Refactor Dashboard component for improved clarity
+[33m688cbf9[m Add environment variables support
+[33m48a59eb[m FIX: Restored actual inventory folder and tracking files
+[33m7dafcd2[m FIX: Forced adding inventory files
+[33mcf86303[m Removing old inventory reference
+[33me88d63a[m Final fix: Matched all import cases with file names
+[33mb2393b3[m Fix: Casing fixed for SaleInvoice and PurchaseInvoice
+[33m7dba20c[m Fix: Dittoo match local files casing
+[33m6206536[m Fresh start: All files added correctly
+[33mfe336d8[m first commit
