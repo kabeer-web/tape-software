@@ -1,9 +1,20 @@
 import { useState, useContext } from 'react';
 import { useParams } from 'react-router-dom';
-import { StockContext, matchesCategory, sameBrand } from './StockContext';
+import { StockContext } from './StockContext';
 import { PlusCircle, AlertTriangle, Package, Trash2 } from 'lucide-react';
 
+// Same page every Carton brand uses — which brand it's showing comes from
+// the URL (/inventory/carton/:brand). Brand list itself is hardcoded in
+// Sidebar.jsx (CARTON_CORE_BRANDS) — no Supabase `brands` table involved.
 const LOW = 20;
+
+// Local helpers (kept inside this file on purpose, not imported from
+// StockContext) — old Carton rows saved by a previous app version may:
+//   - store the category under `type` instead of `category`
+//   - have the brand name in a different case ("BELL" vs "Bell")
+// so matching has to tolerate both instead of a strict `===`.
+const matchesCategory = (item, cat) => item?.category === cat || item?.type === cat;
+const sameBrand = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 
 export default function CartonManager() {
   const { brand: brandParam } = useParams();
