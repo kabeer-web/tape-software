@@ -1,6 +1,10 @@
 import { Component } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
+// Catches any render crash below it (e.g. a page-level component throwing)
+// and shows a visible message instead of a black screen. Without this,
+// a thrown error unmounts the tree with nothing shown to the user —
+// this makes the actual error visible so it can be diagnosed and fixed.
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import ErrorBoundary from "./Components/ErrorBoundary";
+import ErrorBoundary from './Components/ErrorBoundary';
 import { WifiOff, RefreshCw } from 'lucide-react';
 import { StockProvider } from './Components/inventory/StockContext';
 import { AccountsProvider } from './Components/inventory/ACCOUNTS/AccountsContext';
@@ -26,7 +26,7 @@ import Masking from './Components/inventory/JAMBOFILES/masking';
 import Tissue from './Components/inventory/JAMBOFILES/tissue';
 import Foam from './Components/inventory/JAMBOFILES/foam';
 
-// Carton & Core — one dynamic  gpage each now (brand list comes from the
+// Carton & Core — one dynamic page each now (brand list comes from the
 // `brands` table), replacing what used to be 4 hardcoded files per
 // category (CARTON BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx and
 // the CORE BRANDS equivalents). A new brand no longer needs a new file.
