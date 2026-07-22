@@ -24,6 +24,26 @@ export const rollMatches = (rollNo, query) => {
   return displayRoll(rollNo) === q || String(rollNo ?? '') === q;
 };
 
+// ── Legacy-data compatibility helpers ───────────────────────────────────
+// The current schema stores an item's kind in `category` ('Carton',
+// 'Core', 'Clear', ...). Rows saved by an older version of this app (or
+// inserted directly into Supabase before the `category` column existed)
+// used a column called `type` for the same thing instead. JAMBOFILES/*.jsx
+// already guarded against this (`i.category === CAT || i.type === CAT`);
+// CartonManager/CoreManager/Production/Dashboard/MasterSearch did not —
+// which is exactly why old Carton/Core stock silently disappeared from
+// those pages while brand-new rows (always saved with `category`) worked
+// fine. Use this instead of a raw `i.category === X` check everywhere.
+export const matchesCategory = (item, cat) =>
+  item?.category === cat || item?.type === cat;
+
+// Old brand values may only differ by case or stray whitespace
+// ("BELL" / "Bell" / "bell " for the same brand). Compare normalized
+// instead of a strict `===` so a brand page finds every row that's really
+// the same brand, regardless of how it was originally typed/imported.
+export const sameBrand = (a, b) =>
+  String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
 export const StockContext = createContext();
 export const useStock = () => useContext(StockContext);
 
@@ -89,6 +109,7 @@ export const StockProvider = ({ children }) => {
   // they're used (see upsertStock further down), so a new brand never
   // needs a code change.
   const [brands, setBrands] = useState([]);
+  const [brandsLoaded, setBrandsLoaded] = useState(false);
   const brandsRef = useRef([]);
   const setBrandsBoth = (updater) => {
     setBrands(prev => {
@@ -99,7 +120,7 @@ export const StockProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    getBrands().then(setBrandsBoth).catch(console.error);
+    getBrands().then(data => { setBrandsBoth(data); setBrandsLoaded(true); }).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -119,6 +140,30 @@ export const StockProvider = ({ children }) => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Backfill legacy brands into the `brands` table ─────────
+  // Old Carton/Core rows (saved by a previous version of the app, or
+  // inserted straight into Supabase) never went through addBrandManual, so
+  // their brand name never became a row in `brands` — and since Sidebar's
+  // brand list is driven entirely by that table (see Sidebar.jsx
+  // `brands.map(...)`), those brands never showed up as a clickable link at
+  // all. This runs once brands + inventory have both loaded and registers
+  // any brand already in use that isn't registered yet. Purely additive —
+  // it only ever adds rows to `brands`, never touches `inventory`.
+  useEffect(() => {
+    if (!brandsLoaded || loading) return;
+    const known = new Set(brandsRef.current.map(b => b.name.trim().toLowerCase()));
+    const legacyBrands = new Set(
+      inventory
+        .filter(i => matchesCategory(i, 'Carton') || matchesCategory(i, 'Core'))
+        .map(i => String(i.brand || '').trim())
+        .filter(Boolean)
+    );
+    legacyBrands.forEach(name => {
+      if (!known.has(name.toLowerCase())) ensureBrandExists(name);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandsLoaded, loading, inventory]);
 
   // Manual "+ Add Brand" from the UI.
   const addBrandManual = async (name) => {
@@ -145,11 +190,11 @@ export const StockProvider = ({ children }) => {
     const updated = await updateBrand(brandObj._id, clean);
     setBrandsBoth(prev => prev.map(b => b._id === brandObj._id ? updated : b).sort((a,b)=>a.name.localeCompare(b.name)));
 
-    const affected = inventoryRef.current.filter(i => i.brand === brandObj.name);
+    const affected = inventoryRef.current.filter(i => sameBrand(i.brand, brandObj.name));
     for (const item of affected) {
       await updateInventory(item._id || item.id, { brand: clean });
     }
-    setInventory(prev => prev.map(i => i.brand === brandObj.name ? { ...i, brand: clean } : i));
+    setInventory(prev => prev.map(i => sameBrand(i.brand, brandObj.name) ? { ...i, brand: clean } : i));
     return updated;
   };
 
@@ -248,7 +293,11 @@ export const StockProvider = ({ children }) => {
     if (amount === 0) return;
     if (matchFields.brand && amount > 0) ensureBrandExists(matchFields.brand); // fire-and-forget, non-blocking
     const existing = inventoryRef.current.find(i =>
-      Object.entries(matchFields).every(([k, v]) => String(i[k] ?? '') === String(v ?? ''))
+      Object.entries(matchFields).every(([k, v]) => {
+        if (k === 'brand') return sameBrand(i.brand, v);
+        if (k === 'category') return matchesCategory(i, v);
+        return String(i[k] ?? '') === String(v ?? '');
+      })
     );
     if (existing) {
       return updateStock(existing._id || existing.id, amount);
