@@ -11,7 +11,7 @@ import { StockContext } from './inventory/StockContext';
 
 // Inline delete-confirm (click once to arm, click again to confirm) instead
 // of a browser confirm() popup — matches the app's own styling instead of
-// looking like a jarring native dialog.
+// looking like a jarring native dialog hm.
 const BrandRow = ({ brand, type, isRenaming, renameValue, setRenameValue, onStartRename, onCancelRename, onSaveRename, onDelete, onNavClick, navLinkClass }) => {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
