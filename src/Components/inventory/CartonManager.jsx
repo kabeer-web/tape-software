@@ -4,11 +4,17 @@ import { StockContext } from './StockContext';
 import { PlusCircle, AlertTriangle, Package, Trash2 } from 'lucide-react';
 
 // Same page every Carton brand uses — which brand it's showing comes from
-// the URL (/inventory/carton/:brand), managed from the Sidebar (add/rename/
-// delete) instead of a file per brand like the old CARTON BRANDS/bell.jsx,
-// race.jsx, tesco.jsx, jhonson.jsx did.
+// the URL (/inventory/carton/:brand). Brand list itself is hardcoded in
+// Sidebar.jsx (CARTON_CORE_BRANDS) — no Supabase `brands` table involved.
 const LOW = 20;
-// Carton sizes now come live from StockContext.cartonSizeOptions (managed in Sidebar).
+
+// Local helpers (kept inside this file on purpose, not imported from
+// StockContext) — old Carton rows saved by a previous app version may:
+//   - store the category under `type` instead of `category`
+//   - have the brand name in a different case ("BELL" vs "Bell")
+// so matching has to tolerate both instead of a strict `===`.
+const matchesCategory = (item, cat) => item?.category === cat || item?.type === cat;
+const sameBrand = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 
 export default function CartonManager() {
   const { brand: brandParam } = useParams();
@@ -24,10 +30,10 @@ export default function CartonManager() {
   const flash = (t) => { setMsg(t); setTimeout(()=>setMsg(''),3000); };
 
   const filtered = inventory.filter(i =>
-    i.brand === BRAND &&
-    i.category === 'Carton' &&
+    sameBrand(i.brand, BRAND) &&
+    matchesCategory(i, 'Carton') &&
     (cartonType === '' || i.carton_type === cartonType || i.cartonType === cartonType) &&
-    (size === '' || String(i.size) === size)
+    (size === '' || String(i.size ?? i.carton_size ?? '') === size)
   );
 
   const totalQty = filtered.reduce((s, i) => s + (Number(i.qty) || 0), 0);
@@ -147,7 +153,7 @@ export default function CartonManager() {
                 <tr key={item._id} className={`border-t border-white/5 hover:bg-white/[0.02] transition-all ${isLow ? 'bg-yellow-500/5' : ''}`}>
                   <td className="p-4 text-xs text-gray-500 font-bold">{item.date}</td>
                   <td className="p-4 text-sm font-bold uppercase tracking-widest">{item.carton_type || item.cartonType}</td>
-                  <td className="p-4 text-sm font-black">{item.size}"</td>
+                  <td className="p-4 text-sm font-black">{item.size ?? item.carton_size}"</td>
                   <td className="p-4">
                     <span className={`font-black text-sm px-3 py-1 rounded-lg ${isLow ? 'bg-yellow-500/20 text-yellow-500' : 'bg-[#22c55e]/10 text-[#22c55e]'}`}>
                       {currentQty} PCS {isLow && <span className="ml-1 text-[8px] uppercase">Low</span>}
