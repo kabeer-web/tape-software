@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect, useMemo } from 'react';
-import { StockContext, displayRoll, rollMatches } from './StockContext';
+import { StockContext, displayRoll, rollMatches, matchesCategory, sameBrand } from './StockContext';
 import {
   getInventoryByRoll, getProductions,
   addProduction, updateProduction, deleteProduction, logActivity
@@ -115,8 +115,8 @@ const handleSearch = async () => {
   const coreItem = useMemo(() => {
     if (!form.coreBrand || !form.coreSide || !form.corePly) return null;
     return inventory.find(i => 
-      i.category === 'Core' && 
-      i.brand === form.coreBrand && 
+      matchesCategory(i, 'Core') && 
+      sameBrand(i.brand, form.coreBrand) && 
       sideMatch(i.side, form.coreSide) && 
       String(i.ply) === String(form.corePly)
     ) || null;
@@ -130,9 +130,9 @@ const handleSearch = async () => {
   // with stale-value + delta instead of current-value + delta). These two
   // always read the live `inventory` array instead.
   const findLiveRoll = (rollNo, category) =>
-    inventory.find(i => (i.category === category || i.type === category) && displayRoll(i.rollNo || i.roll_no) === displayRoll(rollNo)) || null;
+    inventory.find(i => matchesCategory(i, category) && displayRoll(i.rollNo || i.roll_no) === displayRoll(rollNo)) || null;
   const findLiveCore = (brand, side, ply) =>
-    inventory.find(i => i.category === 'Core' && i.brand === brand && sideMatch(i.side, side) && String(i.ply) === String(ply)) || null;
+    inventory.find(i => matchesCategory(i, 'Core') && sameBrand(i.brand, brand) && sideMatch(i.side, side) && String(i.ply) === String(ply)) || null;
 
   // Logs tab: search by Jambo roll #, then group all entries for the same
   // roll together (instead of pure created_at order) — e.g. Roll #1 today,
