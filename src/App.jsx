@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { WifiOff, RefreshCw } from 'lucide-react';
 import { StockProvider } from './Components/inventory/StockContext';
@@ -54,35 +54,6 @@ const ProtectedRoute = ({ children }) => {
 };
 
 // Main Layout
-// Was: any crash while rendering a page (a bad URL param, unexpected null,
-// etc.) unmounted the WHOLE app with nothing on screen and nothing in the
-// console unless dev tools were already open — that's the "black screen,
-// no error" pattern that kept coming up. This catches it and shows the
-// actual error message on screen instead, with a way back.
-class ErrorBoundary extends Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error, info) { console.error('App crashed:', error, info); }
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="min-h-screen bg-[#070707] flex items-center justify-center p-6 text-center">
-          <div className="max-w-md">
-            <p className="text-2xl font-black text-red-400 mb-2">Kuch ghalat ho gaya</p>
-            <p className="text-sm text-gray-500 mb-1">Ye page load nahi ho saka. Neeche wala message copy karke bhej do:</p>
-            <pre className="text-xs text-left bg-white/5 border border-red-500/20 rounded-xl p-3 mt-3 mb-4 overflow-auto text-red-300 whitespace-pre-wrap">{String(this.state.error?.message || this.state.error)}</pre>
-            <div className="flex gap-3 justify-center">
-              <button onClick={() => { this.setState({ error: null }); window.location.href = '/'; }} className="px-5 py-2.5 rounded-xl bg-[#22c55e] text-black font-bold text-sm">Home pe jao</button>
-              <button onClick={() => window.location.reload()} className="px-5 py-2.5 rounded-xl bg-white/10 text-white font-bold text-sm">Reload</button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 const AppLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -198,7 +169,7 @@ const OfflineBanner = () => {
 
 function App() {
   return (
-    <ErrorBoundary>
+    <>
       <OfflineBanner />
       <AuthProvider>
         <StockProvider>
@@ -216,7 +187,7 @@ function App() {
           </AccountsProvider>
         </StockProvider>
       </AuthProvider>
-    </ErrorBoundary>
+    </>
   );
 }
 
