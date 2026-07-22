@@ -6,7 +6,7 @@ import {
 
 // ✅ Vercel Build Paths (Fixed)
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
-import { StockContext } from '../StockContext';
+import { StockContext, matchesCategory, sameBrand } from '../StockContext';
 
 // ── Parties List ──────────────────────────────
 const PARTIES = [
@@ -344,7 +344,7 @@ const SaleInvoice = () => {
     for (const c of cartonRows) {
       const cQty = Number(c.qty) || 0;
       if (!c.brand || cQty <= 0) continue;
-      const match = inventory.find(i => i.brand === c.brand && i.category === 'Carton' && (i.carton_type || i.cartonType) === c.type && String(i.size) === String(c.size));
+      const match = inventory.find(i => sameBrand(i.brand, c.brand) && matchesCategory(i, 'Carton') && (i.carton_type || i.cartonType) === c.type && String(i.size ?? i.carton_size ?? '') === String(c.size));
       if (!match) {
         setMsg(`❌ No matching carton stock found for ${c.brand} ${c.type} ${c.size}" — add it to inventory first.`);
         return;
