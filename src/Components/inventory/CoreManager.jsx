@@ -3,12 +3,7 @@ import { useParams } from 'react-router-dom';
 import { StockContext, matchesCategory, sameBrand } from './StockContext';
 import { PlusCircle, Trash2, AlertTriangle, Package, Plus, Minus } from 'lucide-react';
 
-// Same page every Core brand uses — which brand it's showing comes from the
-// URL (/inventory/core/:brand), and the brand itself is managed from the
-// Sidebar (add/rename/delete) instead of needing a new file per brand like
-// the old CORE BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx did.
 const LOW = 20;
-// Ply options now come live from StockContext.plyOptions (managed in Sidebar).
 const SIDE_OPTIONS = [
   { val:'Single', label:'Single (S/S)' },
   { val:'Double', label:'Double (D/S)' },
@@ -76,7 +71,6 @@ export default function CoreManager() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
           <Package className="text-[#22c55e]" size={22}/>
@@ -93,7 +87,6 @@ export default function CoreManager() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Filter */}
         <div className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20">
           <p className="text-xs text-gray-500 uppercase font-bold mb-3">Filter Stock</p>
           <div className="flex gap-3">
@@ -108,7 +101,6 @@ export default function CoreManager() {
           </div>
         </div>
 
-        {/* Add Form */}
         <form onSubmit={handleAdd} className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20 space-y-3">
           <p className="text-xs text-gray-500 uppercase font-bold">Add Core Stock</p>
           <div className="grid grid-cols-2 gap-3">
@@ -130,7 +122,6 @@ export default function CoreManager() {
         </form>
       </div>
 
-      {/* Table */}
       <div className="bg-white/[0.03] rounded-2xl border border-[#22c55e]/10 overflow-x-auto">
         <table className="w-full text-left min-w-[560px]">
           <thead className="bg-black/40 text-gray-500 text-[10px] uppercase font-bold">
