@@ -26,7 +26,7 @@ import Masking from './Components/inventory/JAMBOFILES/masking';
 import Tissue from './Components/inventory/JAMBOFILES/tissue';
 import Foam from './Components/inventory/JAMBOFILES/foam';
 
-// Carton & Core — one dynamic page each now (brand list comes from the
+// Carton & Core — one dynamic  gpage each now (brand list comes from the
 // `brands` table), replacing what used to be 4 hardcoded files per
 // category (CARTON BRANDS/bell.jsx, race.jsx, tesco.jsx, jhonson.jsx and
 // the CORE BRANDS equivalents). A new brand no longer needs a new file.
