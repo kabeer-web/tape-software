@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import ErrorBoundary from './Components/ErrorBoundary';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { WifiOff, RefreshCw } from 'lucide-react';
 import { StockProvider } from './Components/inventory/StockContext';
 import { AccountsProvider } from './Components/inventory/ACCOUNTS/AccountsContext';
@@ -57,7 +56,6 @@ const ProtectedRoute = ({ children }) => {
 // Main Layout
 const AppLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const location = useLocation();
 
   return (
     <div className="flex bg-[#070707] min-h-screen relative">
@@ -78,7 +76,6 @@ const AppLayout = () => {
           <div className="w-9" />
         </div>
         <div className="flex-1 p-4 md:p-6 lg:p-8">
-          <ErrorBoundary key={location.pathname}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/search" element={<MasterSearch />} />
@@ -93,16 +90,8 @@ const AppLayout = () => {
             <Route path="/inventory/jambo/masking" element={<Masking />} />
             <Route path="/inventory/jambo/tissue-tape" element={<Tissue />} />
             <Route path="/inventory/jambo/foam-tape" element={<Foam />} />
-            <Route path="/inventory/carton/bell" element={<Navigate to="/inventory/carton/Bell" replace />} />
-            <Route path="/inventory/carton/race" element={<Navigate to="/inventory/carton/Race" replace />} />
-            <Route path="/inventory/carton/tesco" element={<Navigate to="/inventory/carton/Tesco" replace />} />
-            <Route path="/inventory/carton/jhonson" element={<Navigate to="/inventory/carton/Jhonson" replace />} />
             <Route path="/inventory/carton/:brand" element={<CartonManager />} />
             <Route path="/inventory/carton" element={<CartonManager />} />
-            <Route path="/inventory/core/bell" element={<Navigate to="/inventory/core/Bell" replace />} />
-            <Route path="/inventory/core/race" element={<Navigate to="/inventory/core/Race" replace />} />
-            <Route path="/inventory/core/tesco" element={<Navigate to="/inventory/core/Tesco" replace />} />
-            <Route path="/inventory/core/jhonson" element={<Navigate to="/inventory/core/Jhonson" replace />} />
             <Route path="/inventory/core/:brand" element={<CoreManager />} />
             <Route path="/inventory/core" element={<CoreManager />} />
             <Route path="/billing/sale" element={<SaleInvoice />} />
@@ -121,7 +110,6 @@ const AppLayout = () => {
               </div>
             } />
           </Routes>
-          </ErrorBoundary>
         </div>
       </main>
     </div>
