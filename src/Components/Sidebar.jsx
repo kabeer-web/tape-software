@@ -2,11 +2,78 @@ import { useState, useContext } from 'react';
 import {
   LayoutDashboard, Package, Receipt, Settings,
   ChevronDown, ChevronRight, Search,
-  Users, X, FileText, BookOpen, LogOut, Factory, History
+  Users, X, FileText, BookOpen, LogOut, Factory, History,
+  Pencil, Trash2, Plus, Check
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { StockContext } from './inventory/StockContext';
+
+// Inline delete-confirm (click once to arm, click again to confirm) instead
+// of a browser confirm() popup — matches the app's own styling instead of
+// looking like a jarring native dialog.
+const BrandRow = ({ brand, type, isRenaming, renameValue, setRenameValue, onStartRename, onCancelRename, onSaveRename, onDelete, onNavClick, navLinkClass }) => {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  if (isRenaming) {
+    return (
+      <div className="flex items-center gap-1 py-1">
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={e => setRenameValue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onSaveRename(); if (e.key === 'Escape') onCancelRename(); }}
+          className="flex-1 min-w-0 bg-black/40 px-2 py-1 rounded-md border border-[#22c55e]/40 outline-none text-xs text-white"
+        />
+        <button onClick={onSaveRename} className="text-[#22c55e] p-1 shrink-0"><Check size={12} /></button>
+        <button onClick={onCancelRename} className="text-gray-500 p-1 shrink-0"><X size={12} /></button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-0.5 group">
+      <NavLink to={`/inventory/${type}/${encodeURIComponent(brand.name)}`} onClick={onNavClick} className={navLinkClass + ' flex-1 min-w-0'}>
+        <span className="w-1 h-1 rounded-full bg-current opacity-60 shrink-0" /><span className="truncate">{brand.name}</span>
+      </NavLink>
+      {confirmingDelete ? (
+        <>
+          <button onClick={onDelete} title="Confirm delete" className="text-red-500 hover:text-red-400 p-1 shrink-0"><Check size={12} /></button>
+          <button onClick={() => setConfirmingDelete(false)} title="Cancel" className="text-gray-500 hover:text-gray-300 p-1 shrink-0"><X size={12} /></button>
+        </>
+      ) : (
+        <>
+          <button onClick={onStartRename} title="Rename brand" className="text-gray-600 hover:text-[#22c55e] p-1 shrink-0 opacity-60 group-hover:opacity-100 transition"><Pencil size={11} /></button>
+          <button onClick={() => setConfirmingDelete(true)} title="Delete brand" className="text-gray-600 hover:text-red-500 p-1 shrink-0 opacity-60 group-hover:opacity-100 transition"><Trash2 size={11} /></button>
+        </>
+      )}
+    </div>
+  );
+};
+
+const AddBrandRow = ({ isAdding, value, setValue, onStart, onCancel, onSave }) => {
+  if (isAdding) {
+    return (
+      <div className="flex items-center gap-1 py-1">
+        <input
+          autoFocus
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+          placeholder="Brand name..."
+          className="flex-1 min-w-0 bg-black/40 px-2 py-1 rounded-md border border-[#22c55e]/40 outline-none text-xs text-white"
+        />
+        <button onClick={onSave} className="text-[#22c55e] p-1 shrink-0"><Check size={12} /></button>
+        <button onClick={onCancel} className="text-gray-500 p-1 shrink-0"><X size={12} /></button>
+      </div>
+    );
+  }
+  return (
+    <button onClick={onStart} className="flex items-center gap-1.5 text-[11px] text-[#22c55e]/70 hover:text-[#22c55e] py-1.5 px-1 transition">
+      <Plus size={11} /> Add Brand
+    </button>
+  );
+};
 
 const Sidebar = ({ onClose = () => {} }) => {
   const location = useLocation();
@@ -19,10 +86,35 @@ const Sidebar = ({ onClose = () => {} }) => {
   const [isBillingOpen, setIsBillingOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
 
-  // Brand names come live from the `brands` table in Supabase — add a new
-  // brand there (or via the app, if that UI exists) and it shows up here
-  // automatically, no code change/redeploy needed.
-  const { brands } = useContext(StockContext);
+  // Brand names come live from the `brands` table in Supabase — add/rename/
+  // delete a brand from this sidebar (below) and it's saved to Supabase and
+  // reflected everywhere immediately, no code change/redeploy needed.
+  const { brands, addBrandManual, renameBrandManual, deleteBrandManual } = useContext(StockContext);
+
+  // Add/rename-brand inline UI state (shared by both the Core and Carton
+  // submenus below, since brand names are the same list for both).
+  const [addingBrandFor, setAddingBrandFor] = useState(null); // 'core' | 'carton' | null
+  const [newBrandName, setNewBrandName] = useState('');
+  const [renamingBrandId, setRenamingBrandId] = useState(null);
+  const [renameBrandInput, setRenameBrandInput] = useState('');
+
+  const handleAddBrand = async () => {
+    const name = newBrandName.trim();
+    if (!name) return;
+    try { await addBrandManual(name); } catch (e) { console.error(e); }
+    setNewBrandName('');
+    setAddingBrandFor(null);
+  };
+
+  const startRenameBrand = (b) => { setRenamingBrandId(b._id); setRenameBrandInput(b.name); };
+  const cancelRenameBrand = () => { setRenamingBrandId(null); setRenameBrandInput(''); };
+  const handleRenameBrand = async (b) => {
+    try { await renameBrandManual(b, renameBrandInput); } catch (e) { console.error(e); }
+    cancelRenameBrand();
+  };
+  const handleDeleteBrand = async (b) => {
+    try { await deleteBrandManual(b._id); } catch (e) { console.error(e); }
+  };
 
   const jamboFiles = [
     { name: "Overview",     path: "/inventory/jambo" },
@@ -155,10 +247,13 @@ const Sidebar = ({ onClose = () => {} }) => {
               {isCartonOpen && (
                 <div className="ml-3 flex flex-col gap-0.5 mb-1 border-l border-[#22c55e]/10 pl-2">
                   {brands.map(b => (
-                    <NavLink key={b._id} to={`/inventory/carton/${encodeURIComponent(b.name)}`} onClick={handleNavClick} className={subLinkClass}>
-                      <span className="w-1 h-1 rounded-full bg-current opacity-60" />{b.name}
-                    </NavLink>
+                    <BrandRow key={b._id} brand={b} type="carton"
+                      isRenaming={renamingBrandId === b._id} renameValue={renameBrandInput} setRenameValue={setRenameBrandInput}
+                      onStartRename={() => startRenameBrand(b)} onCancelRename={cancelRenameBrand} onSaveRename={() => handleRenameBrand(b)}
+                      onDelete={() => handleDeleteBrand(b)} onNavClick={handleNavClick} navLinkClass={subLinkClass} />
                   ))}
+                  <AddBrandRow isAdding={addingBrandFor==='carton'} value={newBrandName} setValue={setNewBrandName}
+                    onStart={() => setAddingBrandFor('carton')} onCancel={() => { setAddingBrandFor(null); setNewBrandName(''); }} onSave={handleAddBrand} />
                 </div>
               )}
 
@@ -169,19 +264,22 @@ const Sidebar = ({ onClose = () => {} }) => {
               {isCoreOpen && (
                 <div className="ml-3 flex flex-col gap-0.5 mb-1 border-l border-[#22c55e]/10 pl-2">
                   {brands.map(b => (
-                    <NavLink key={b._id} to={`/inventory/core/${encodeURIComponent(b.name)}`} onClick={handleNavClick} className={subLinkClass}>
-                      <span className="w-1 h-1 rounded-full bg-current opacity-60" />{b.name}
-                    </NavLink>
+                    <BrandRow key={b._id} brand={b} type="core"
+                      isRenaming={renamingBrandId === b._id} renameValue={renameBrandInput} setRenameValue={setRenameBrandInput}
+                      onStartRename={() => startRenameBrand(b)} onCancelRename={cancelRenameBrand} onSaveRename={() => handleRenameBrand(b)}
+                      onDelete={() => handleDeleteBrand(b)} onNavClick={handleNavClick} navLinkClass={subLinkClass} />
                   ))}
+                  <AddBrandRow isAdding={addingBrandFor==='core'} value={newBrandName} setValue={setNewBrandName}
+                    onStart={() => setAddingBrandFor('core')} onCancel={() => { setAddingBrandFor(null); setNewBrandName(''); }} onSave={handleAddBrand} />
                 </div>
               )}
             </div>
           )}
         </div>
 
-<NavLink to="/production" onClick={handleNavClick} className={navLinkClass}>
-  <Factory size={18} /> Production
-</NavLink>
+        <NavLink to="/production" onClick={handleNavClick} className={navLinkClass}>
+          <Factory size={18} /> Production
+        </NavLink>
         {/* Billing */}
         <div className="mt-1">
           <SectionToggle label="Billing" icon={Receipt} isOpen={isBillingOpen} onToggle={() => setIsBillingOpen(!isBillingOpen)} isActive={isBillingActive} />
@@ -210,7 +308,7 @@ const Sidebar = ({ onClose = () => {} }) => {
           )}
         </div>
 
-        {/* History (was Analytics — dead link before, now a real page) */}
+        {/* History */}
         <div className="mt-1">
           <NavLink to="/analytics" onClick={handleNavClick} className={navLinkClass}>
             <History size={18} /> History
@@ -228,7 +326,6 @@ const Sidebar = ({ onClose = () => {} }) => {
 
       {/* User + Logout Footer */}
       <div className="px-4 pb-5 pt-3 border-t border-[#22c55e]/10 shrink-0">
-        {/* User Info */}
         <div className="flex items-center gap-3 px-3 py-2.5 mb-2 bg-white/[0.03] rounded-xl border border-white/5">
           <div className="w-8 h-8 rounded-xl bg-[#22c55e]/20 border border-[#22c55e]/30 flex items-center justify-center shrink-0">
             <span className="text-[#22c55e] font-black text-sm">
@@ -243,7 +340,6 @@ const Sidebar = ({ onClose = () => {} }) => {
           </div>
         </div>
 
-        {/* Logout */}
         <button
           onClick={() => {
             if (window.confirm('Logout karna hai?')) signOut();
