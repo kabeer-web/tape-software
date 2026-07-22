@@ -400,4 +400,3 @@ export const StockProvider = ({ children }) => {
     </StockContext.Provider>
   );
 };
-
