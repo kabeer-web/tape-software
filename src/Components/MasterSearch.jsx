@@ -1,5 +1,5 @@
 import { useState, useContext, useMemo, useEffect } from 'react';
-import { StockContext, displayRoll, rollMatches } from './inventory/StockContext';
+import { StockContext, displayRoll, rollMatches, matchesCategory } from './inventory/StockContext';
 import { useAccounts } from './inventory/ACCOUNTS/AccountsContext';
 import { getProductions } from '../api';
 import {
@@ -188,7 +188,7 @@ const MasterSearch = () => {
 
   // 2. CORE GROUPING LOGIC
   const filteredCore = useMemo(() => {
-    const raw = inventory.filter(i => i.category === 'Core');
+    const raw = inventory.filter(i => matchesCategory(i, 'Core'));
     const grouped = raw.reduce((acc, curr) => {
       const key = `${curr.brand}-${curr.side}-${curr.ply}`;
       if (!acc[key]) acc[key] = { ...curr, totalQty: 0 };
@@ -200,7 +200,7 @@ const MasterSearch = () => {
 
   // 3. CARTON GROUPING LOGIC
   const filteredCarton = useMemo(() => {
-    const raw = inventory.filter(i => i.category === 'Carton' || i.type === 'Carton');
+    const raw = inventory.filter(i => matchesCategory(i, 'Carton'));
     const grouped = raw.reduce((acc, curr) => {
       const cType = curr.cartonType || curr.carton_type || 'Standard';
       const key = `${curr.brand}-${cType}-${curr.size}`;
