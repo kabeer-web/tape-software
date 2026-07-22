@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import ErrorBoundary from './Components/ErrorBoundary';
+import ErrorBoundary from "./Components/ErrorBoundary";
 import { WifiOff, RefreshCw } from 'lucide-react';
 import { StockProvider } from './Components/inventory/StockContext';
 import { AccountsProvider } from './Components/inventory/ACCOUNTS/AccountsContext';
