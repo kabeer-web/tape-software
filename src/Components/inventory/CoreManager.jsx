@@ -3,6 +3,9 @@ import { useParams } from 'react-router-dom';
 import { StockContext } from './StockContext';
 import { PlusCircle, Trash2, AlertTriangle, Package, Plus, Minus } from 'lucide-react';
 
+const filteredData = inventory.filter(...);
+
+console.log(filteredData);
 // Same page every Core brand uses — which brand it's showing comes from the
 // URL (/inventory/core/:brand), and the brand itself is managed from the
 // Sidebar (add/rename/delete) instead of needing a new file per brand like
