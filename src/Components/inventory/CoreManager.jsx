@@ -1,11 +1,8 @@
 import { useState, useContext } from 'react';
 import { useParams } from 'react-router-dom';
-import { StockContext } from './StockContext';
+import { StockContext, matchesCategory, sameBrand } from './StockContext';
 import { PlusCircle, Trash2, AlertTriangle, Package, Plus, Minus } from 'lucide-react';
 
-const filteredData = inventory.filter(...);
-
-console.log(filteredData);
 // Same page every Core brand uses — which brand it's showing comes from the
 // URL (/inventory/core/:brand), and the brand itself is managed from the
 // Sidebar (add/rename/delete) instead of needing a new file per brand like
@@ -31,8 +28,8 @@ export default function CoreManager() {
   const [msg,        setMsg]        = useState('');
 
   const filtered = inventory.filter(i =>
-    i.brand    === BRAND &&
-    i.category === 'Core' &&
+    sameBrand(i.brand, BRAND) &&
+    matchesCategory(i, 'Core') &&
     (filterSide==='' || i.side===filterSide) &&
     (filterPly ==='' || String(i.ply)===filterPly)
   );
