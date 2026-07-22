@@ -1,5 +1,5 @@
 import { useContext, useMemo, useState, useEffect } from 'react';
-import { StockContext, displayRoll } from '../Components/inventory/StockContext';
+import { StockContext, displayRoll, matchesCategory } from '../Components/inventory/StockContext';
 import { useAccounts } from '../Components/inventory/ACCOUNTS/AccountsContext';
 import { getProductions, getInventory, getBills, getLedgerEntries, addInventory, addBill, addProduction, addLedgerEntry } from '../api';
 import {
@@ -267,8 +267,8 @@ const Dashboard = () => {
 
   const stats = useMemo(() => {
     const jambo = inventory.filter(i => JAMBO_CATEGORIES.includes(i.category || i.type));
-    const core = inventory.filter(i => i.category === 'Core');
-    const carton = inventory.filter(i => i.category === 'Carton');
+    const core = inventory.filter(i => matchesCategory(i, 'Core'));
+    const carton = inventory.filter(i => matchesCategory(i, 'Carton'));
 
     const monthlyData = {};
     const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
