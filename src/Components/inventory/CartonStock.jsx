@@ -3,6 +3,11 @@ import { StockContext } from "./StockContext";
 import { Search, Layers, Package, AlertTriangle } from 'lucide-react';
 
 const LOW_STOCK_THRESHOLD = 20;
+console.log("Component Loaded");
+
+  console.log("Brand:", BRAND);
+  console.log("Inventory:", inventory);
+
 // Carton sizes now come live from StockContext.cartonSizeOptions (managed in Sidebar).
 
 const CartonStock = () => {
