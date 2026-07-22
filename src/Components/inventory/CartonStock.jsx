@@ -3,12 +3,7 @@ import { useParams } from 'react-router-dom';
 import { StockContext, matchesCategory, sameBrand } from './StockContext';
 import { PlusCircle, AlertTriangle, Package, Trash2 } from 'lucide-react';
 
-// Same page every Carton brand uses — which brand it's showing comes from
-// the URL (/inventory/carton/:brand), managed from the Sidebar (add/rename/
-// delete) instead of a file per brand like the old CARTON BRANDS/bell.jsx,
-// race.jsx, tesco.jsx, jhonson.jsx did.
 const LOW = 20;
-// Carton sizes now come live from StockContext.cartonSizeOptions (managed in Sidebar).
 
 export default function CartonManager() {
   const { brand: brandParam } = useParams();
