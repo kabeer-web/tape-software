@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import ErrorBoundary from './Components/ErrorBoundary';
 import { WifiOff, RefreshCw } from 'lucide-react';
 import { StockProvider } from './Components/inventory/StockContext';
 import { AccountsProvider } from './Components/inventory/ACCOUNTS/AccountsContext';
@@ -56,6 +57,7 @@ const ProtectedRoute = ({ children }) => {
 // Main Layout
 const AppLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="flex bg-[#070707] min-h-screen relative">
@@ -76,6 +78,7 @@ const AppLayout = () => {
           <div className="w-9" />
         </div>
         <div className="flex-1 p-4 md:p-6 lg:p-8">
+          <ErrorBoundary key={location.pathname}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/search" element={<MasterSearch />} />
@@ -118,6 +121,7 @@ const AppLayout = () => {
               </div>
             } />
           </Routes>
+          </ErrorBoundary>
         </div>
       </main>
     </div>
