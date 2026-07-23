@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect, useMemo } from 'react';
-import { StockContext, displayRoll, rollMatches, matchesCategory, sameBrand } from './StockContext';
+import { StockContext, displayRoll, rollMatches } from './StockContext';
 import {
   getInventoryByRoll, getProductions,
   addProduction, updateProduction, deleteProduction, logActivity
@@ -115,8 +115,8 @@ const handleSearch = async () => {
   const coreItem = useMemo(() => {
     if (!form.coreBrand || !form.coreSide || !form.corePly) return null;
     return inventory.find(i => 
-      matchesCategory(i, 'Core') && 
-      sameBrand(i.brand, form.coreBrand) && 
+      i.category === 'Core' && 
+      i.brand === form.coreBrand && 
       sideMatch(i.side, form.coreSide) && 
       String(i.ply) === String(form.corePly)
     ) || null;
@@ -130,9 +130,9 @@ const handleSearch = async () => {
   // with stale-value + delta instead of current-value + delta). These two
   // always read the live `inventory` array instead.
   const findLiveRoll = (rollNo, category) =>
-    inventory.find(i => matchesCategory(i, category) && displayRoll(i.rollNo || i.roll_no) === displayRoll(rollNo)) || null;
+    inventory.find(i => (i.category === category || i.type === category) && displayRoll(i.rollNo || i.roll_no) === displayRoll(rollNo)) || null;
   const findLiveCore = (brand, side, ply) =>
-    inventory.find(i => matchesCategory(i, 'Core') && sameBrand(i.brand, brand) && sideMatch(i.side, side) && String(i.ply) === String(ply)) || null;
+    inventory.find(i => i.category === 'Core' && i.brand === brand && sideMatch(i.side, side) && String(i.ply) === String(ply)) || null;
 
   // Logs tab: search by Jambo roll #, then group all entries for the same
   // roll together (instead of pure created_at order) — e.g. Roll #1 today,
@@ -495,11 +495,11 @@ const handleSearch = async () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                  <tr><th className="p-6">Date</th><th className="p-6">Identity</th><th className="p-6">Core Specs</th><th className="p-6 text-center">Batch Size</th><th className="p-6 text-center">Net Yards</th><th className="p-6 text-right">Actions</th></tr>
+                  <tr><th className="p-6">Date</th><th className="p-6">Identity</th><th className="p-6">Core Specs</th><th className="p-6 text-center">Batch Size</th><th className="p-6 text-center">Yards/Core</th><th className="p-6 text-center">Net Yards</th><th className="p-6 text-right">Actions</th></tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {visibleProductions.length === 0 ? (
-                    <tr><td colSpan={6} className="p-32 text-center text-slate-700 font-bold uppercase tracking-widest italic">No activity recorded yet.</td></tr>
+                    <tr><td colSpan={7} className="p-32 text-center text-slate-700 font-bold uppercase tracking-widest italic">No activity recorded yet.</td></tr>
                   ) : visibleProductions.map(p => {
                     const isEditingRow = editId === p._id;
                     return (
@@ -551,6 +551,11 @@ const handleSearch = async () => {
                         {isEditingRow ? (
                           <input type="number" value={editRow.core_qty_used} onChange={e => setEditRow(r => ({ ...r, core_qty_used: e.target.value }))} className="w-16 bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-sm text-center" />
                         ) : (<>{p.core_qty_used} <small className="text-[9px] opacity-40 uppercase tracking-tighter">pcs</small></>)}
+                      </td>
+                      <td className="p-6 text-center font-black text-lg text-slate-300">
+                        {isEditingRow ? (
+                          <input type="number" step="0.01" value={editRow.yards_per_core} onChange={e => setEditRow(r => ({ ...r, yards_per_core: e.target.value }))} className="w-20 bg-black/40 p-1.5 rounded-lg border border-[#10b981]/40 outline-none text-sm text-center" />
+                        ) : (<>{p.yards_per_core} <small className="text-[9px] opacity-40 uppercase tracking-tighter">yds/core</small></>)}
                       </td>
                       <td className="p-6 text-center font-black text-xl text-[#10b981]">
                         {isEditingRow ? (
