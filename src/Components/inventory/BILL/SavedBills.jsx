@@ -6,6 +6,10 @@ import {
   Plus, Search, Printer, Users, ChevronDown
 } from 'lucide-react';
 
+// Options for editing a Purchase Jambo item's spec fields — same list
+// PurchaseInvoice.jsx uses when the item was first entered.
+const JAMBO_CATEGORIES = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam','Lemon'];
+
 // ── Number to words ───────────────────────────────────────
 const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
 const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
@@ -163,7 +167,7 @@ const emptyItem = {
 
 const SavedBills = () => {
   const { bills, updateBill, deleteBill, updateEntry, deleteEntry, getLedgerEntryForBill } = useAccounts();
-  const { inventory, upsertStock, adjustStock } = useContext(StockContext);
+  const { inventory, upsertStock, adjustStock, brands, plyOptions, cartonSizeOptions } = useContext(StockContext);
 
   const [editId,      setEditId]      = useState(null);
   const [editData,    setEditData]    = useState(null);
@@ -257,7 +261,13 @@ const SavedBills = () => {
         const totalQty = (parseFloat(i.totalCarton) || 0) * (parseFloat(i.perCtnQty) || 0);
         return { ...i, totalQty, total: totalQty * (parseFloat(i.rate) || 0) };
       }
-      return { ...i, amount: (parseFloat(i.qty) || 0) * (parseFloat(i.rate) || 0) };
+      // Purchase — also recompute specsLabel, since brand/side/ply/
+      // cartonType/size/jambo fields are now editable here too.
+      let specsLabel = i.specsLabel;
+      if (i.mainCategory === 'Core') specsLabel = `${i.brand} • ${i.side} • ${i.ply} Ply`;
+      else if (i.mainCategory === 'Carton') specsLabel = `${i.brand} • ${i.cartonType} • ${i.size}"`;
+      else if (i.mainCategory === 'Jambo') specsLabel = `${i.jamboCategory} • ${i.micron}mic • ${i.width}mm${i.color ? ` • ${i.color}` : ''}${i.weight ? ` • ${i.weight}kg` : ''}`;
+      return { ...i, specsLabel, amount: (parseFloat(i.qty) || 0) * (parseFloat(i.rate) || 0) };
     });
 
     const grandTotal = recomputedItems.reduce((s, i) =>
@@ -277,11 +287,27 @@ const SavedBills = () => {
         const oldById = new Map((bill.items || []).map(i => [i.id, i]));
         const newById = new Map((editData.items || []).map(i => [i.id, i]));
 
+        // What defines "the same stock row" for Core/Carton — if any of
+        // these changed (not just qty), the old delta-only approach would
+        // silently move stock into the wrong brand/spec's bucket instead
+        // of the one it was actually taken from.
+        const specKey = (i) =>
+          i.mainCategory === 'Core'   ? `Core|${i.brand}|${i.side}|${i.ply}` :
+          i.mainCategory === 'Carton' ? `Carton|${i.brand}|${i.cartonType}|${i.size}` :
+          null; // Jambo isn't spec-matched here — it's tracked by inventoryId instead.
+
         for (const [id, newItem] of newById) {
           const oldItem = oldById.get(id);
           const oldQty = oldItem ? (Number(oldItem.qty) || 0) : 0;
           const newQty = Number(newItem.qty) || 0;
-          await applyPurchaseItemDelta(newItem, newQty - oldQty);
+          if (oldItem && newItem.mainCategory !== 'Jambo' && specKey(oldItem) !== specKey(newItem)) {
+            // Brand/spec changed — fully reverse from the old spec, fully
+            // apply to the new one, instead of delta-ing the wrong row.
+            await applyPurchaseItemDelta(oldItem, -oldQty);
+            await applyPurchaseItemDelta(newItem, newQty);
+          } else {
+            await applyPurchaseItemDelta(newItem, newQty - oldQty);
+          }
         }
         for (const [id, oldItem] of oldById) {
           if (!newById.has(id)) {
@@ -621,7 +647,7 @@ const SavedBills = () => {
                     </table>
                   ) : (
                     /* Purchase bill items */
-                    <table className="w-full text-left text-xs min-w-[500px]">
+                    <table className="w-full text-left text-xs min-w-[760px]">
                       <thead className="bg-black/20 text-gray-500 uppercase">
                         <tr>
                           <th className="p-2.5">Category</th>
@@ -638,7 +664,58 @@ const SavedBills = () => {
                             {isEditing ? (
                               <>
                                 <td className="p-1.5 text-gray-400 text-xs">{item.mainCategory}</td>
-                                <td className="p-1.5 font-mono text-gray-300 text-xs">{item.specsLabel}</td>
+                                <td className="p-1.5">
+                                  <div className="flex flex-wrap gap-1">
+                                    {item.mainCategory === 'Core' && (
+                                      <>
+                                        <input list="pb-brand-list" value={item.brand||''}
+                                          onChange={e=>updateEditItem(idx,'brand',e.target.value)}
+                                          placeholder="Brand"
+                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-20 text-xs"/>
+                                        <select value={item.side||''} onChange={e=>updateEditItem(idx,'side',e.target.value)}
+                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
+                                          <option value="">Side</option><option value="Single">Single</option><option value="Double">Double</option>
+                                        </select>
+                                        <select value={item.ply||''} onChange={e=>updateEditItem(idx,'ply',e.target.value)}
+                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
+                                          <option value="">Ply</option>{plyOptions.map(p=><option key={p} value={p}>{p} Ply</option>)}
+                                        </select>
+                                      </>
+                                    )}
+                                    {item.mainCategory === 'Carton' && (
+                                      <>
+                                        <input list="pb-brand-list" value={item.brand||''}
+                                          onChange={e=>updateEditItem(idx,'brand',e.target.value)}
+                                          placeholder="Brand"
+                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-20 text-xs"/>
+                                        <select value={item.cartonType||''} onChange={e=>updateEditItem(idx,'cartonType',e.target.value)}
+                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
+                                          <option value="">Type</option><option value="Small">Small</option><option value="Large">Large</option>
+                                        </select>
+                                        <select value={item.size||''} onChange={e=>updateEditItem(idx,'size',e.target.value)}
+                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
+                                          <option value="">Size</option>{cartonSizeOptions.map(s=><option key={s} value={s}>{s}"</option>)}
+                                        </select>
+                                      </>
+                                    )}
+                                    {item.mainCategory === 'Jambo' && (
+                                      <>
+                                        <select value={item.jamboCategory||''} onChange={e=>updateEditItem(idx,'jamboCategory',e.target.value)}
+                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
+                                          <option value="">Type</option>{JAMBO_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        <input value={item.micron||''} onChange={e=>updateEditItem(idx,'micron',e.target.value)}
+                                          placeholder="Micron" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
+                                        <input value={item.width||''} onChange={e=>updateEditItem(idx,'width',e.target.value)}
+                                          placeholder="Width" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
+                                        <input value={item.color||''} onChange={e=>updateEditItem(idx,'color',e.target.value)}
+                                          placeholder="Color" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
+                                        <input type="number" value={item.weight||''} onChange={e=>updateEditItem(idx,'weight',e.target.value)}
+                                          placeholder="Weight(kg)" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="p-1.5">
                                   <input type="number" value={item.qty||''}
                                     onChange={e=>updateEditItem(idx,'qty',e.target.value)}
@@ -685,6 +762,10 @@ const SavedBills = () => {
   // ── Render ─────────────────────────────────────────────
   return (
     <div className="text-white min-h-screen">
+
+      <datalist id="pb-brand-list">
+        {(brands||[]).map(b=><option key={b._id} value={b.name}/>)}
+      </datalist>
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
