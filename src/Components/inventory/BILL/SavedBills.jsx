@@ -246,13 +246,23 @@ const SavedBills = () => {
     const bill = bills.find(b => (b._id || b.id) === editId);
     if (!bill) { cancelEdit(); return; }
 
-    const grandTotal = (editData.items || []).reduce((s, i) => {
+    // updateEditItem only patches the one field you typed into (rate, qty,
+    // totalCarton, perCtnQty) — it never touches that row's own derived
+    // total. Without this recompute, saving an edit updated the bill's
+    // Grand Total correctly but left every individual row's displayed
+    // total/amount frozen at whatever it was when the item was first
+    // added, making the edit look like it didn't take effect.
+    const recomputedItems = (editData.items || []).map(i => {
       if (editData.billType === 'Sale') {
-        return s + (parseFloat(i.totalCarton)||0) * (parseFloat(i.perCtnQty)||0) * (parseFloat(i.rate)||0);
+        const totalQty = (parseFloat(i.totalCarton) || 0) * (parseFloat(i.perCtnQty) || 0);
+        return { ...i, totalQty, total: totalQty * (parseFloat(i.rate) || 0) };
       }
-      return s + (parseFloat(i.qty)||0) * (parseFloat(i.rate)||0);
-    }, 0);
-    const totalCartonCount = (editData.items || []).reduce((s, i) => s + (parseFloat(i.totalCarton)||0), 0);
+      return { ...i, amount: (parseFloat(i.qty) || 0) * (parseFloat(i.rate) || 0) };
+    });
+
+    const grandTotal = recomputedItems.reduce((s, i) =>
+      s + (editData.billType === 'Sale' ? (i.total || 0) : (i.amount || 0)), 0);
+    const totalCartonCount = recomputedItems.reduce((s, i) => s + (parseFloat(i.totalCarton)||0), 0);
 
     setBusyId(editId); setActionErr('');
     try {
@@ -284,7 +294,7 @@ const SavedBills = () => {
       // touch inventory, correctly matching what SaleInvoice.jsx itself did.
 
       await syncLedgerAmount(bill, grandTotal);
-      await updateBill(editId, { ...editData, grandTotal, totalCartonCount });
+      await updateBill(editId, { ...editData, items: recomputedItems, grandTotal, totalCartonCount });
       cancelEdit();
     } catch (err) {
       setActionErr('❌ Save failed: ' + err.message);
