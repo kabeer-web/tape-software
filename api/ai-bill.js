@@ -55,10 +55,10 @@ Known existing brands (agar prompt mein koi brand mile jo is list mein hai to wa
 Ply options: ${(plyOptions||[]).join(', ') || 'N/A'}. Carton sizes: ${(cartonSizeOptions||[]).join(', ') || 'N/A'}.
 Agar koi zaroori field prompt mein clear nahi hai to reasonable best-guess karo — kabhi bhi required field khali mat chodo (sirf color/chalanNo/billNo jaise optional fields khali reh sakte hain).
 Agar user ek se zyada item ka zikar kare (jaise "Bell 5 large aur Tesco 3 small"), to har ek alag item ke tor par array mein daalo.
-STRICT RULE: sirf valid JSON return karo — nka koi exktra text, na markdown code fences, na explanation.`;
+STRICT RULE: sirf valid JSON return karo — na koi extra text, na markdown code fences, na explanation.`;
 
   try {
-    const upstream = await fetch('api not working', {
+    const upstream = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
