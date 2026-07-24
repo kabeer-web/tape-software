@@ -7,6 +7,7 @@ import {
 // ✅ Vercel Build Paths (Fixed)
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext, matchesCategory, sameBrand } from '../StockContext';
+import AIBillAssistant from './AIBillAssistant';
 
 // ── Parties List ──────────────────────────────
 const PARTIES = [
@@ -182,7 +183,7 @@ export const generateInvoiceHTML = (bill) => {
 
 const SaleInvoice = () => {
   const { saveBill, postLedger, bills, ledger, parties }      = useAccounts();
-  const { inventory, updateStock, cartonSizeOptions }    = useContext(StockContext);
+  const { inventory, updateStock, cartonSizeOptions, brands }    = useContext(StockContext);
 
   const [savedDraft] = useState(loadSaleDraft); // read once, on mount only
   const [showDraftBanner, setShowDraftBanner] = useState(() =>
@@ -404,6 +405,29 @@ const SaleInvoice = () => {
         <div className="flex items-center gap-3"><FileText className="text-[#22c55e]" size={22}/><div><h1 className="text-2xl font-black">SALE <span className="text-[#22c55e]">INVOICE</span></h1><p className="text-gray-500 text-xs font-bold uppercase tracking-widest">Ready for Printing</p></div></div>
         <div className="flex gap-2">
           <button onClick={handleSave} disabled={rows.length===0 || saving} className="bg-white/[0.05] border border-[#22c55e]/30 text-[#22c55e] font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 hover:bg-[#22c55e]/10 transition disabled:opacity-30 text-sm"><Save size={14}/>{saving ? 'Saving...' : 'Save Bill'}</button>
+          <AIBillAssistant
+            billType="Sale"
+            context={{ brands: (brands||[]).map(b=>b.name) }}
+            onResult={(data) => {
+              const newRows = (data.items || []).map((it, i) => {
+                const tc = parseFloat(it.totalCarton) || 0;
+                const pc = parseFloat(it.perCtnQty) || 0;
+                const rate = parseFloat(it.rate) || 0;
+                const totalQty = tc * pc;
+                const total = totalQty * rate;
+                const sizeLabel = [it.sizeMm ? `${it.sizeMm}mm` : '', it.sizeInch ? `${it.sizeInch}` : '', it.yards ? `${it.yards}yds` : ''].filter(Boolean).join(' / ');
+                return {
+                  id: Date.now() + i,
+                  sizeUnit: 'mm', sizeMm: it.sizeMm||'', sizeInch: it.sizeInch||'', yards: it.yards||'',
+                  colour: it.colour||'', brand: it.brand||'', micron: it.micron||'',
+                  totalCarton: tc, perCtnQty: pc, rate, totalQty, total, sizeLabel,
+                };
+              });
+              setRows(p => [...p, ...newRows]);
+              if (data.partyName && !buyerName) setBuyerName(String(data.partyName).toUpperCase());
+              if (data.billNo && !billNo) setBillNo(data.billNo);
+            }}
+          />
           <button onClick={handlePrint} disabled={rows.length===0} className="bg-[#22c55e] text-black font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 hover:bg-[#1db954] transition disabled:opacity-30 text-sm"><Printer size={14}/> Print</button>
         </div>
       </div>

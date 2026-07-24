@@ -1,6 +1,7 @@
 import { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { StockContext } from '../StockContext';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
+import AIBillAssistant from './AIBillAssistant';
 import {
   Plus, Trash2, Archive, RotateCcw, Printer, Save, Upload, X,
   Package, Box, Layers, Truck
@@ -43,6 +44,7 @@ const generatePurchasePrintHTML = (bill) => {
       <td style="text-align:center">${i + 1}</td>
       <td><b>${r.mainCategory}</b></td>
       <td>${r.specsLabel}</td>
+      <td style="text-align:center">${r.weight || ''}</td>
       <td style="text-align:center">${r.qty}</td>
       <td style="text-align:right">${(r.rate || 0).toLocaleString()}</td>
       <td style="text-align:right;font-weight:bold">${(r.amount || 0).toLocaleString()}</td>
@@ -76,7 +78,7 @@ const generatePurchasePrintHTML = (bill) => {
       <div style="text-align:right"><h1>Purchase Invoice</h1><div class="co-info">Bill #${billNo || '—'}${chalanNo ? ` &nbsp;•&nbsp; Chalan #${chalanNo}` : ''}<br/>Date: ${date}</div></div>
     </div>
     <div class="meta"><span>Supplier: <b>${partyName}</b></span></div>
-    <table><thead><tr><th>#</th><th>Category</th><th>Specs</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+    <table><thead><tr><th>#</th><th>Category</th><th>Specs</th><th>Weight</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table>
     <div class="total-row"><div class="total-box"><div class="label">Grand Total</div><div class="value">Rs. ${(grandTotal || 0).toLocaleString()}</div></div></div>
     <div class="words">"${toWords(grandTotal)}"</div>
     <div class="sign"><div>Received By</div><div>Authorized Signature</div></div>
@@ -155,22 +157,21 @@ const PurchaseInvoice = () => {
   };
 
   const addItem = () => {
+    const weight = parseFloat(form.weight);
     const qty = parseFloat(form.qty);
     const rate = parseFloat(form.rate);
-    if (!qty || !rate) return;
-    // Weight-based pricing is optional and Jambo-only — if left blank,
-    // behaves exactly as before (Rate × Qty/Yards). If a weight is given,
-    // Rate × Weight(KG) becomes the amount instead, since Jambo rolls are
-    // often actually priced by weight, not yardage.
-    const weight = parseFloat(form.weight) || 0;
-    const isJamboWeighted = form.mainCategory === 'Jambo' && weight > 0;
-    const amount = isJamboWeighted ? rate * weight : qty * rate;
+    if (!weight || !qty || !rate) return;
+    // Amount = Weight × Qty × Rate for every category — e.g. 5 pieces at
+    // 10kg each, rate 100/kg. Qty here is the piece count and is separate
+    // from the physical stock-count `qty` tracked in inventory (that still
+    // moves by this same value, unaffected by weight/rate).
+    const amount = weight * qty * rate;
     let specsLabel = '';
     if (form.mainCategory === 'Core') specsLabel = `${form.brand} • ${form.side} • ${form.ply} Ply`;
     else if (form.mainCategory === 'Carton') specsLabel = `${form.brand} • ${form.cartonType} • ${form.size}"`;
-    else specsLabel = `${form.jamboCategory} • ${form.micron}mic • ${form.width}mm${form.color ? ` • ${form.color}` : ''}${weight ? ` • ${weight}kg` : ''}`;
+    else specsLabel = `${form.jamboCategory} • ${form.micron}mic • ${form.width}mm${form.color ? ` • ${form.color}` : ''}`;
 
-    setRows(p => [...p, { id: Date.now(), ...form, qty, rate, weight, amount, specsLabel }]);
+    setRows(p => [...p, { id: Date.now(), ...form, weight, qty, rate, amount, specsLabel }]);
     setForm({ ...emptyForm, mainCategory: form.mainCategory });
   };
 
@@ -241,6 +242,32 @@ const PurchaseInvoice = () => {
         <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter"><Archive className="inline text-[#22c55e] mr-2 -mt-2" size={30}/> PURCHASE <span className="text-[#22c55e]">INVOICE</span></h1>
         <div className="flex gap-3">
           <button onClick={handlePrint} disabled={rows.length===0} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-5 py-2.5 rounded-xl font-bold uppercase text-xs tracking-wide transition disabled:opacity-30"><Printer size={14}/> Print</button>
+          <AIBillAssistant
+            billType="Purchase"
+            context={{ brands: (brands||[]).map(b=>b.name), plyOptions, cartonSizeOptions }}
+            onResult={(data) => {
+              const newRows = (data.items || []).map((it, i) => {
+                const weight = parseFloat(it.weight) || 1;
+                const qty = parseFloat(it.qty) || 0;
+                const rate = parseFloat(it.rate) || 0;
+                const amount = weight * qty * rate;
+                let specsLabel = '';
+                if (it.mainCategory === 'Core') specsLabel = `${it.brand} • ${it.side} • ${it.ply} Ply`;
+                else if (it.mainCategory === 'Carton') specsLabel = `${it.brand} • ${it.cartonType} • ${it.size}"`;
+                else specsLabel = `${it.jamboCategory} • ${it.micron}mic • ${it.width}mm${it.color ? ` • ${it.color}` : ''}`;
+                return {
+                  id: Date.now() + i,
+                  mainCategory: it.mainCategory, brand: it.brand||'', side: it.side||'', ply: it.ply||'',
+                  cartonType: it.cartonType||'', size: it.size||'', jamboCategory: it.jamboCategory||'',
+                  color: it.color||'', micron: it.micron||'', width: it.width||'',
+                  weight, qty, rate, amount, specsLabel,
+                };
+              });
+              setRows(p => [...p, ...newRows]);
+              if (data.supplierName && !supplierName) setSupplierName(data.supplierName);
+              if (data.chalanNo && !chalanNo) setChalanNo(data.chalanNo);
+            }}
+          />
           <button onClick={handleSaveBill} disabled={rows.length === 0 || saving} className="flex items-center gap-2 bg-[#22c55e] text-black hover:bg-[#1db954] px-6 py-2.5 rounded-xl font-black uppercase text-xs tracking-wide transition disabled:opacity-30"><Save size={14}/> {saving ? 'Saving...' : 'Save Bill'}</button>
         </div>
       </div>
@@ -346,10 +373,11 @@ const PurchaseInvoice = () => {
               <select value={form.jamboCategory} onChange={e=>setForm({...form, jamboCategory:e.target.value})} className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm"><option value="">Jambo Type</option>{JAMBO_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
               <input value={form.micron} onChange={e=>setForm({...form, micron:e.target.value})} placeholder="Micron" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
               <input value={form.width} onChange={e=>setForm({...form, width:e.target.value})} placeholder="Width (mm)" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
-              <input type="number" value={form.weight} onChange={e=>setForm({...form, weight:e.target.value})} placeholder="Weight (KG) — optional" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
+              <input value={form.color} onChange={e=>setForm({...form, color:e.target.value})} placeholder="Color — optional" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
             </>
           )}
-          <input type="number" value={form.qty} onChange={e=>setForm({...form, qty:e.target.value})} placeholder="Qty / Yards" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
+          <input type="number" value={form.weight} onChange={e=>setForm({...form, weight:e.target.value})} placeholder="Weight (KG)" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
+          <input type="number" value={form.qty} onChange={e=>setForm({...form, qty:e.target.value})} placeholder="Qty (pieces)" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
           <input type="number" value={form.rate} onChange={e=>setForm({...form, rate:e.target.value})} placeholder="Rate" className="bg-black/30 p-3 rounded-xl border border-white/10 outline-none text-sm" />
           <button onClick={addItem} className="bg-[#22c55e] text-black font-black p-3 rounded-xl flex items-center justify-center gap-2 hover:bg-[#1db954] transition text-xs uppercase tracking-wide"><Plus size={16}/> Add</button>
         </div>
@@ -360,15 +388,16 @@ const PurchaseInvoice = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[640px]">
             <thead className="bg-black/30 text-gray-500 uppercase text-[10px] tracking-widest">
-              <tr><th className="p-4">Category</th><th className="p-4">Specs</th><th className="p-4 text-center">Qty</th><th className="p-4 text-right">Rate</th><th className="p-4 text-right">Total</th><th className="p-4 w-12"></th></tr>
+              <tr><th className="p-4">Category</th><th className="p-4">Specs</th><th className="p-4 text-center">Weight</th><th className="p-4 text-center">Qty</th><th className="p-4 text-right">Rate</th><th className="p-4 text-right">Total</th><th className="p-4 w-12"></th></tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {rows.length === 0 ? (
-                <tr><td colSpan={6} className="p-16 text-center text-gray-600 font-bold uppercase tracking-widest italic">Koi item add nahi hua.</td></tr>
+                <tr><td colSpan={7} className="p-16 text-center text-gray-600 font-bold uppercase tracking-widest italic">Koi item add nahi hua.</td></tr>
               ) : rows.map(r=>(
                 <tr key={r.id} className="hover:bg-white/[0.02] transition">
                   <td className="p-4 font-bold text-[#22c55e] text-sm">{r.mainCategory}</td>
                   <td className="p-4 text-xs text-gray-400">{r.specsLabel}</td>
+                  <td className="p-4 text-center font-bold text-sm">{r.weight}</td>
                   <td className="p-4 text-center font-bold text-sm">{r.qty}</td>
                   <td className="p-4 text-right font-mono text-xs text-gray-400">{(r.rate || 0).toLocaleString()}</td>
                   <td className="p-4 text-right font-black text-white">Rs. {(r.amount || 0).toLocaleString()}</td>
