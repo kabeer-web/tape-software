@@ -1,7 +1,7 @@
 // Vercel serverless function — runs on the server, never in the browser, so
-// the xAI (Grok) API key stays hidden. Set XAI_API_KEY in Vercel Project
-// Settings → Environment Variables. Optionally set XAI_MODEL to override
-// the default model.
+// the Groq API key stays hidden. Set GROQ_API_KEY in Vercel Project
+// Settings → Environment Variables (get a free key at console.groq.com —
+// no credit card needed). Optionally set GROQ_MODEL to override the model.
 //
 // Frontend calls: POST /api/ai-bill  { prompt, billType, brands, plyOptions, cartonSizeOptions }
 // Returns: parsed JSON straight from the model (see the schema instructions
@@ -15,9 +15,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.XAI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: 'XAI_API_KEY is not configured on the server (Vercel → Settings → Environment Variables).' });
+    res.status(500).json({ error: 'GROQ_API_KEY is not configured on the server (Vercel → Settings → Environment Variables). Free key: console.groq.com' });
     return;
   }
 
@@ -58,14 +58,14 @@ Agar user ek se zyada item ka zikar kare (jaise "Bell 5 large aur Tesco 3 small"
 STRICT RULE: sirf valid JSON return karo — na koi extra text, na markdown code fences, na explanation.`;
 
   try {
-    const upstream = await fetch('https://api.x.ai/v1/chat/completions', {
+    const upstream = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: process.env.XAI_MODEL || 'grok-3-mini',
+        model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
@@ -77,14 +77,14 @@ STRICT RULE: sirf valid JSON return karo — na koi extra text, na markdown code
 
     if (!upstream.ok) {
       const errText = await upstream.text();
-      res.status(502).json({ error: `xAI error (${upstream.status}): ${errText.slice(0, 500)}` });
+      res.status(502).json({ error: `Groq error (${upstream.status}): ${errText.slice(0, 500)}` });
       return;
     }
 
     const data = await upstream.json();
     const content = data?.choices?.[0]?.message?.content;
     if (!content) {
-      res.status(502).json({ error: 'xAI returned no content' });
+      res.status(502).json({ error: 'Groq returned no content' });
       return;
     }
 
