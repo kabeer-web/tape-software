@@ -4,8 +4,18 @@
 // no credit card needed). Optionally set GROQ_MODEL to override the model.
 //
 // Frontend calls: POST /api/ai-bill  { prompt, billType, brands, plyOptions, cartonSizeOptions, existingItems }
-// Returns: parsed JSON straight from the model (see the schema instructions
-// below) — the frontend turns that into `rows` for the invoice being edited.
+// Returns: { operations: [...], partyName?, billNo? }
+//
+// IMPORTANT DESIGN NOTE: this used to ask the model to return the FULL,
+// final item list every time (existing + edited + new, minus deleted).
+// That was fragile — the model would sometimes drop, duplicate, or
+// mis-transcribe untouched items when re-stating a long list, so a bill
+// could silently lose or corrupt entries it was never even asked to touch.
+// Now the model only describes WHAT CHANGED — a small list of operations
+// ("add this new item", "edit entry 3 to X", "delete entry 2") — and the
+// frontend applies those operations to its own existing rows array. Items
+// the user didn't mention are never re-transcribed by the model, so they
+// can't be corrupted by it.
 
 const JAMBO_CATEGORIES = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam','Lemon'];
 
@@ -27,12 +37,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  const schema = billType === 'Sale'
-    ? `Return JSON: { "items": [...], "partyName"?: string, "billNo"?: string }
-Each item in "items":
-{
-  "sizeMm": string (optional),
-  "sizeInch": string (optional),
+  const itemSchema = billType === 'Sale'
+    ? `{
+  "sizeMm": string (optional — e.g. "1280"),
+  "sizeInch": string (optional — ALWAYS include the inch mark, e.g. "1/2\\"", "1\\"", "2\\"", "3\\"", "4\\"", "6\\""),
   "yards": string (optional),
   "colour": string,
   "brand": string,
@@ -41,32 +49,42 @@ Each item in "items":
   "perCtnQty": number,
   "rate": number
 }
-Don't compute totalQty/total — the app does that (totalQty = totalCarton × perCtnQty, total = totalQty × rate, unless rate looks like a per-carton price, in which case the app multiplies by totalCarton instead — you never need to worry about this, just return the rate the user said).`
-    : `Return JSON: { "items": [...], "supplierName"?: string, "chalanNo"?: string }
-Each item in "items" is ONE of these three shapes, chosen by category:
+Don't compute totalQty/total — the app does that.`
+    : `ONE of these three shapes, chosen by category:
 Core:   { "mainCategory":"Core", "brand": string, "side": "Single"|"Double", "ply": string, "weight": number, "qty": number, "rate": number }
 Carton: { "mainCategory":"Carton", "brand": string, "cartonType": "Small"|"Large", "size": string, "weight": number, "qty": number, "rate": number }
 Jambo:  { "mainCategory":"Jambo", "jamboCategory": one of [${JAMBO_CATEGORIES.join(', ')}], "micron": string, "width": string, "color": string (optional), "weight": number, "qty": number, "rate": number }
-"weight" is in KG, "qty" is piece count. Amount for every item = weight × qty × rate. If the user doesn't mention a weight, use 1 for weight (so amount just becomes qty × rate). Don't compute "amount" yourself — the app does that.`;
+"weight" is in KG, "qty" is piece count. Don't compute "amount" — the app does that. If the user doesn't mention a weight, use 1.`;
 
-  // If the bill already has items on screen, the user's instruction might be
-  // "add this new item" OR "edit/delete an existing one by its number" (e.g.
-  // "entry 3 ka rate 20 kar do", "2nd item delete kar do"). Rather than
-  // requiring the frontend to diff an edit instruction against the list
-  // itself, we hand the model the full current list (numbered) and always
-  // ask for the full, final list back — additions, edits, and deletions all
-  // expressed the same simple way: "here's what the list should look like
-  // now."
   const existingItemsBlock = (existingItems && existingItems.length)
-    ? `\n\nBill mein already ye items maujood hain (number se refer karo agar user kisi existing item ko edit ya delete karne ko kahe):\n${JSON.stringify(existingItems, null, 0)}\n\nZAROORI: Hamesha POORI, FINAL items list return karo — jitne bhi items list mein rehne chahiye (purane jo unchanged hain + jo edit hue + jo naye add hue), MINUS jo delete karne ko kaha gaya. Agar user sirf "add karo" bol raha hai (kisi number ka zikar nahi), to purane sab items ko as-is wapis do aur naya item end mein add kar do. Agar user "entry N edit/change karo" kahe, to sirf wahi entry badlo, baaki sab as-is rakho. Agar "entry N delete/hata do" kahe, to bas wo entry list se nikal do, baaki as-is. Kabhi bhi sirf naye/changed items mat bhejna — hamesha COMPLETE list bhejo.`
-    : '';
+    ? `\n\nBill mein already ye items hain (number se refer karo agar user kisi existing item ko edit ya delete karne ko kahe):\n${JSON.stringify(existingItems, null, 0)}`
+    : '\n\nBill abhi khali hai — jo bhi user bole, wo sab "add" operations honge.';
 
-  const systemPrompt = `Tum ek tape/packaging factory ke billing assistant ho, jo user ke Roman Urdu/Hindi ya English free-text description se bill ke items nikalte ho.
-${schema}
+  const systemPrompt = `Tum ek tape/packaging factory ke billing assistant ho, jo user ke Roman Urdu/Hindi ya English free-text instruction ko bill operations mein badalte ho.
+
+Return JSON EXACTLY in this shape:
+{
+  "operations": [
+    { "type": "add", "item": ${itemSchema.split('\n')[0]} ... },
+    { "type": "edit", "targetNumber": <entry number>, "item": { ...only the fields that should change, or the full corrected item... } },
+    { "type": "delete", "targetNumber": <entry number> }
+  ],
+  "partyName"?: string,
+  "billNo"?: string
+}
+
+Each "item" object (for "add" and "edit" operations) has this shape:
+${itemSchema}
+
+RULES:
+- Agar user sirf naya item bata raha hai (koi entry number ka zikar nahi) → ek ya zyada "add" operations do, ek item ke liye ek operation.
+- Agar user kisi existing entry ka number leke usmein tabdeeli maange ("entry 3 ka rate 20 kar do") → EK "edit" operation do, targetNumber us entry ka number, aur "item" mein SIRF wahi fields do jo badli hain (baaki fields chodo — mat bhejo).
+- Agar user kisi entry ko hatane ko kahe ("entry 2 delete karo", "2nd wala hata do") → EK "delete" operation do, sirf targetNumber ke sath, "item" ki zaroorat nahi.
+- Ek hi prompt mein multiple operations ho sakte hain (jaise "entry 2 delete karo aur Tesco 5 large add karo") — dono operations array mein daal do.
+- Kabhi bhi kisi aisi entry ko mat chuna jiska zikar user ne nahi kiya — sirf jo directly mention ho ya jo naya add karna ho, uske operations do.
+- Koi bhi zaroori field clear nahi hai to reasonable best-guess karo (sirf color/chalanNo/billNo jaise optional fields khali reh sakte hain).
 Known existing brands (agar prompt mein koi brand mile jo is list mein hai to wahi spelling use karo, warna jo user ne likha wahi use karo): ${(brands||[]).join(', ') || 'abhi koi nahi'}.
-Ply options: ${(plyOptions||[]).join(', ') || 'N/A'}. Carton sizes: ${(cartonSizeOptions||[]).join(', ') || 'N/A'}.
-Agar koi zaroori field prompt mein clear nahi hai to reasonable best-guess karo — kabhi bhi required field khali mat chodo (sirf color/chalanNo/billNo jaise optional fields khali reh sakte hain).
-Agar user ek se zyada item ka zikar kare (jaise "Bell 5 large aur Tesco 3 small"), to har ek alag item ke tor par array mein daalo.${existingItemsBlock}
+Ply options: ${(plyOptions||[]).join(', ') || 'N/A'}. Carton sizes: ${(cartonSizeOptions||[]).join(', ') || 'N/A'}.${existingItemsBlock}
 STRICT RULE: sirf valid JSON return karo — na koi extra text, na markdown code fences, na explanation.`;
 
   try {
@@ -106,6 +124,18 @@ STRICT RULE: sirf valid JSON return karo — na koi extra text, na markdown code
     } catch {
       res.status(502).json({ error: 'AI ne valid JSON nahi diya, dobara try karo.' });
       return;
+    }
+
+    // Defensive normalization: some models occasionally wrap a single
+    // operation as a bare object, or return "items" instead of
+    // "operations" out of habit. Coerce into the expected shape rather
+    // than failing the whole request over a shape mismatch.
+    if (!Array.isArray(parsed.operations)) {
+      if (Array.isArray(parsed.items)) {
+        parsed.operations = parsed.items.map(item => ({ type: 'add', item }));
+      } else {
+        parsed.operations = [];
+      }
     }
 
     res.status(200).json(parsed);
