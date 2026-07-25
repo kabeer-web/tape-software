@@ -440,28 +440,54 @@ const SaleInvoice = () => {
               // with the full corrected list. See api/ai-bill.js.
               existingItems: rows.map((r, i) => ({
                 number: i + 1,
-                sizeLabel: r.sizeLabel, colour: r.colour, brand: r.brand, micron: r.micron,
+                sizeMm: r.sizeMm, sizeInch: r.sizeInch, yards: r.yards,
+                colour: r.colour, brand: r.brand, micron: r.micron,
                 totalCarton: r.totalCarton, perCtnQty: r.perCtnQty, rate: r.rate,
               })),
             }}
             onResult={(data) => {
-              // The API always returns the FULL, final item list (existing +
-              // edited + new, minus any deleted) — so this replaces `rows`
-              // rather than appending to it.
-              const newRows = (data.items || []).map((it, i) => {
+              // The API returns a small list of operations (add/edit/delete)
+              // describing only what changed — never a full re-statement of
+              // the bill — so existing rows the user didn't mention are
+              // guaranteed to survive untouched; only the app itself moves
+              // them from one state to the next.
+              const buildRow = (it, idHint) => {
                 const tc = parseFloat(it.totalCarton) || 0;
                 const pc = parseFloat(it.perCtnQty) || 0;
                 const rate = parseFloat(it.rate) || 0;
                 const { totalQty, total } = computeSaleTotals(tc, pc, rate);
                 const sizeLabel = [it.sizeMm ? `${it.sizeMm}mm` : '', it.sizeInch ? `${it.sizeInch}` : '', it.yards ? `${it.yards}yds` : ''].filter(Boolean).join(' / ');
                 return {
-                  id: Date.now() + i,
+                  id: idHint ?? Date.now() + Math.random(),
                   sizeUnit: 'mm', sizeMm: it.sizeMm||'', sizeInch: it.sizeInch||'', yards: it.yards||'',
                   colour: it.colour||'', brand: it.brand||'', micron: it.micron||'',
                   totalCarton: tc, perCtnQty: pc, rate, totalQty, total, sizeLabel,
                 };
+              };
+
+              setRows(prevRows => {
+                let next = [...prevRows];
+                for (const op of (data.operations || [])) {
+                  if (op.type === 'add' && op.item) {
+                    next = [...next, buildRow(op.item)];
+                  } else if (op.type === 'edit' && op.targetNumber) {
+                    const idx = op.targetNumber - 1;
+                    if (idx >= 0 && idx < next.length) {
+                      // Merge: only the fields the AI actually returned
+                      // overwrite the existing row — anything it left out
+                      // (because the user didn't ask to change it) stays.
+                      const merged = { ...next[idx], ...op.item };
+                      next[idx] = buildRow(merged, next[idx].id);
+                    }
+                  } else if (op.type === 'delete' && op.targetNumber) {
+                    const idx = op.targetNumber - 1;
+                    if (idx >= 0 && idx < next.length) {
+                      next = next.filter((_, i) => i !== idx);
+                    }
+                  }
+                }
+                return next;
               });
-              setRows(newRows);
               if (data.partyName && !buyerName) setBuyerName(String(data.partyName).toUpperCase());
               if (data.billNo && !billNo) setBillNo(data.billNo);
             }}
