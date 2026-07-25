@@ -100,6 +100,15 @@ const loadPurchaseDraft = () => {
 
 const CATEGORY_ICON = { Core: Package, Carton: Box, Jambo: Layers };
 
+// A short, human-readable one-liner for each item shape, used to describe
+// the current bill to the AI so it can act on "edit entry N" / "delete
+// entry N" instructions (see api/ai-bill.js).
+const describeItem = (r) => {
+  if (r.mainCategory === 'Core') return `Core • ${r.brand} • ${r.side} • ${r.ply} Ply • weight ${r.weight} • qty ${r.qty} • rate ${r.rate}`;
+  if (r.mainCategory === 'Carton') return `Carton • ${r.brand} • ${r.cartonType} • ${r.size}" • weight ${r.weight} • qty ${r.qty} • rate ${r.rate}`;
+  return `Jambo • ${r.jamboCategory} • ${r.micron}mic • ${r.width}mm${r.color ? ` • ${r.color}` : ''} • weight ${r.weight} • qty ${r.qty} • rate ${r.rate}`;
+};
+
 const PurchaseInvoice = () => {
   const { addRoll, upsertStock, brands, plyOptions, cartonSizeOptions } = useContext(StockContext);
   const { saveBill, postLedger, bills, ledger, parties } = useAccounts();
@@ -244,8 +253,17 @@ const PurchaseInvoice = () => {
           <button onClick={handlePrint} disabled={rows.length===0} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-5 py-2.5 rounded-xl font-bold uppercase text-xs tracking-wide transition disabled:opacity-30"><Printer size={14}/> Print</button>
           <AIBillAssistant
             billType="Purchase"
-            context={{ brands: (brands||[]).map(b=>b.name), plyOptions, cartonSizeOptions }}
+            context={{
+              brands: (brands||[]).map(b=>b.name), plyOptions, cartonSizeOptions,
+              // Current bill items, numbered — lets the AI understand
+              // "edit entry 2" / "delete entry 3" instructions and reply
+              // with the full corrected list. See api/ai-bill.js.
+              existingItems: rows.map((r, i) => ({ number: i + 1, description: describeItem(r) })),
+            }}
             onResult={(data) => {
+              // The API always returns the FULL, final item list (existing +
+              // edited + new, minus any deleted) — so this replaces `rows`
+              // rather than appending to it.
               const newRows = (data.items || []).map((it, i) => {
                 const weight = parseFloat(it.weight) || 1;
                 const qty = parseFloat(it.qty) || 0;
@@ -263,7 +281,7 @@ const PurchaseInvoice = () => {
                   weight, qty, rate, amount, specsLabel,
                 };
               });
-              setRows(p => [...p, ...newRows]);
+              setRows(newRows);
               if (data.supplierName && !supplierName) setSupplierName(data.supplierName);
               if (data.chalanNo && !chalanNo) setChalanNo(data.chalanNo);
             }}
@@ -276,7 +294,7 @@ const PurchaseInvoice = () => {
 
       {showDraftBanner && (
         <div className="p-4 rounded-2xl mb-5 font-bold border bg-yellow-500/10 border-yellow-500/40 text-yellow-300 flex flex-wrap items-center justify-between gap-3">
-          <span>📝 Aapka pichla adhura bill wapis load ho gaya hai.</span>
+          <span>📝 Your previous unfinished bill has been restored.</span>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowDraftBanner(false)} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs uppercase tracking-wide">Keep it</button>
             <button onClick={discardDraft} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs uppercase tracking-wide"><RotateCcw size={12}/> Discard Draft</button>
@@ -298,7 +316,7 @@ const PurchaseInvoice = () => {
           <input ref={fileRef} type="file" accept="image/*" onChange={(e)=>{const f=e.target.files[0]; if(f){const rd=new FileReader(); rd.onload=()=>setLogo(rd.result); rd.readAsDataURL(f);}}} className="hidden"/>
           <div className="flex-1">
             <p className="text-sm font-black text-white flex items-center gap-1.5"><Truck size={14} className="text-[#22c55e]"/> Supplier Details</p>
-            <p className="text-[10px] text-gray-500">Bill jitna behtar bharoge, print utna hi saaf niklega.</p>
+            <p className="text-[10px] text-gray-500">The more complete the bill, the cleaner it prints.</p>
           </div>
 
           {/* Stock-update toggle — OFF when the goods were already added
@@ -307,13 +325,13 @@ const PurchaseInvoice = () => {
           <button
             onClick={() => setUpdateStock(v => !v)}
             className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition shrink-0 ${updateStock ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]' : 'bg-yellow-500/10 border-yellow-500/40 text-yellow-300'}`}
-            title={updateStock ? 'Save karne par stock add hogi' : 'Save karne par stock NAHI badlegi (already manual add ho chuka hai)'}
+            title={updateStock ? 'Stock will be added when you save' : 'Stock will NOT change when you save (already added manually)'}
           >
             <span className={`relative w-9 h-5 rounded-full transition ${updateStock ? 'bg-[#22c55e]' : 'bg-white/20'}`}>
               <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-black transition-transform ${updateStock ? 'translate-x-4' : 'translate-x-0'}`}></span>
             </span>
             <span className="text-xs font-bold text-left leading-tight">
-              {updateStock ? <>Stock Update<br/><span className="opacity-70 font-normal">ON — add hogi</span></> : <>Stock Update<br/><span className="opacity-70 font-normal">OFF — sirf bill</span></>}
+              {updateStock ? <>Stock Update<br/><span className="opacity-70 font-normal">ON — will be added</span></> : <>Stock Update<br/><span className="opacity-70 font-normal">OFF — bill only</span></>}
             </span>
           </button>
         </div>
@@ -392,7 +410,7 @@ const PurchaseInvoice = () => {
             </thead>
             <tbody className="divide-y divide-white/5">
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="p-16 text-center text-gray-600 font-bold uppercase tracking-widest italic">Koi item add nahi hua.</td></tr>
+                <tr><td colSpan={7} className="p-16 text-center text-gray-600 font-bold uppercase tracking-widest italic">No items added yet.</td></tr>
               ) : rows.map(r=>(
                 <tr key={r.id} className="hover:bg-white/[0.02] transition">
                   <td className="p-4 font-bold text-[#22c55e] text-sm">{r.mainCategory}</td>
