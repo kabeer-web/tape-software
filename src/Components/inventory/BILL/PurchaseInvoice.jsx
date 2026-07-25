@@ -100,15 +100,6 @@ const loadPurchaseDraft = () => {
 
 const CATEGORY_ICON = { Core: Package, Carton: Box, Jambo: Layers };
 
-// A short, human-readable one-liner for each item shape, used to describe
-// the current bill to the AI so it can act on "edit entry N" / "delete
-// entry N" instructions (see api/ai-bill.js).
-const describeItem = (r) => {
-  if (r.mainCategory === 'Core') return `Core • ${r.brand} • ${r.side} • ${r.ply} Ply • weight ${r.weight} • qty ${r.qty} • rate ${r.rate}`;
-  if (r.mainCategory === 'Carton') return `Carton • ${r.brand} • ${r.cartonType} • ${r.size}" • weight ${r.weight} • qty ${r.qty} • rate ${r.rate}`;
-  return `Jambo • ${r.jamboCategory} • ${r.micron}mic • ${r.width}mm${r.color ? ` • ${r.color}` : ''} • weight ${r.weight} • qty ${r.qty} • rate ${r.rate}`;
-};
-
 const PurchaseInvoice = () => {
   const { addRoll, upsertStock, brands, plyOptions, cartonSizeOptions } = useContext(StockContext);
   const { saveBill, postLedger, bills, ledger, parties } = useAccounts();
@@ -258,13 +249,21 @@ const PurchaseInvoice = () => {
               // Current bill items, numbered — lets the AI understand
               // "edit entry 2" / "delete entry 3" instructions and reply
               // with the full corrected list. See api/ai-bill.js.
-              existingItems: rows.map((r, i) => ({ number: i + 1, description: describeItem(r) })),
+              existingItems: rows.map((r, i) => ({
+                number: i + 1,
+                mainCategory: r.mainCategory, brand: r.brand, side: r.side, ply: r.ply,
+                cartonType: r.cartonType, size: r.size, jamboCategory: r.jamboCategory,
+                color: r.color, micron: r.micron, width: r.width,
+                weight: r.weight, qty: r.qty, rate: r.rate,
+              })),
             }}
             onResult={(data) => {
-              // The API always returns the FULL, final item list (existing +
-              // edited + new, minus any deleted) — so this replaces `rows`
-              // rather than appending to it.
-              const newRows = (data.items || []).map((it, i) => {
+              // The API returns a small list of operations (add/edit/delete)
+              // describing only what changed — never a full re-statement of
+              // the bill — so existing rows the user didn't mention are
+              // guaranteed to survive untouched; only the app itself moves
+              // them from one state to the next.
+              const buildRow = (it, idHint) => {
                 const weight = parseFloat(it.weight) || 1;
                 const qty = parseFloat(it.qty) || 0;
                 const rate = parseFloat(it.rate) || 0;
@@ -274,14 +273,34 @@ const PurchaseInvoice = () => {
                 else if (it.mainCategory === 'Carton') specsLabel = `${it.brand} • ${it.cartonType} • ${it.size}"`;
                 else specsLabel = `${it.jamboCategory} • ${it.micron}mic • ${it.width}mm${it.color ? ` • ${it.color}` : ''}`;
                 return {
-                  id: Date.now() + i,
+                  id: idHint ?? Date.now() + Math.random(),
                   mainCategory: it.mainCategory, brand: it.brand||'', side: it.side||'', ply: it.ply||'',
                   cartonType: it.cartonType||'', size: it.size||'', jamboCategory: it.jamboCategory||'',
                   color: it.color||'', micron: it.micron||'', width: it.width||'',
                   weight, qty, rate, amount, specsLabel,
                 };
+              };
+
+              setRows(prevRows => {
+                let next = [...prevRows];
+                for (const op of (data.operations || [])) {
+                  if (op.type === 'add' && op.item) {
+                    next = [...next, buildRow(op.item)];
+                  } else if (op.type === 'edit' && op.targetNumber) {
+                    const idx = op.targetNumber - 1;
+                    if (idx >= 0 && idx < next.length) {
+                      const merged = { ...next[idx], ...op.item };
+                      next[idx] = buildRow(merged, next[idx].id);
+                    }
+                  } else if (op.type === 'delete' && op.targetNumber) {
+                    const idx = op.targetNumber - 1;
+                    if (idx >= 0 && idx < next.length) {
+                      next = next.filter((_, i) => i !== idx);
+                    }
+                  }
+                }
+                return next;
               });
-              setRows(newRows);
               if (data.supplierName && !supplierName) setSupplierName(data.supplierName);
               if (data.chalanNo && !chalanNo) setChalanNo(data.chalanNo);
             }}
