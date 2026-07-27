@@ -53,20 +53,7 @@ const YARDS_LIST    = ['40','50','80','100','150','200'];
 const CARTON_BRANDS = ['Bell','Race','Tesco','Jhonson'];
 // Carton sizes now come live from StockContext.cartonSizeOptions (managed in Sidebar).
 
-// A rate above this is assumed to be a whole-carton price (e.g. "10000 per
-// carton") rather than a per-roll price. Below it, the rate is treated as
-// per-roll, same as before. This lets the same Rate field accept either
-// kind of number without a separate toggle — type a small number, it's
-// priced per roll; type a big one, it's priced per carton.
-const PER_CARTON_RATE_THRESHOLD = 999;
-const computeSaleTotals = (totalCarton, perCtnQty, rate) => {
-  const totalQty = totalCarton * perCtnQty;
-  const isPerCarton = rate > PER_CARTON_RATE_THRESHOLD;
-  const total = isPerCarton ? rate * totalCarton : rate * totalQty;
-  return { totalQty, total, isPerCarton };
-};
-
-const emptyItem   = { sizeUnit:'mm', sizeMm:'', sizeInch:'', yards:'', colour:'', brand:'', micron:'', totalCarton:'', perCtnQty:'', rate:'' };
+const emptyItem   = { sizeUnit:'mm', sizeMm:'', sizeInch:'', yards:'', colour:'', brand:'', micron:'', totalCarton:'', perCtnQty:'', rate:'', rateMode:'piece' };
 const emptyCartonRow = { brand:'', type:'Small', size:'10', qty:'' };
 
 // ── Draft auto-save ─────────────────────────────────────────
@@ -84,16 +71,15 @@ const loadSaleDraft = () => {
   } catch { return null; }
 };
 
-// `key` here matters: it's set (in the JSX below) to change whenever the row
-// being edited changes, which forces React to remount this component instead
-// of reusing the old instance. Without that, `custom`'s useState initializer
-// only ever runs once on first mount — so switching from "add new" to
-// "edit an existing row whose value isn't in the dropdown options" (e.g. a
-// colour the AI picked that isn't in the hardcoded list) would leave the
-// field looking empty instead of showing that value in the custom input.
-const SelectOrCustom = ({ value, onChange, options, placeholder }) => {
+const SelectOrCustom = ({ value, onChange, options, placeholder, resetKey }) => {
   const isCustom = value !== '' && !options.includes(value);
   const [custom,  setCustom]  = useState(isCustom);
+  // Re-derive whenever we're pointed at a different row (Add vs Edit, or
+  // switching which row is being edited) — otherwise this stayed frozen at
+  // whatever it was on first mount, so a value not in the preset list (like
+  // an AI-generated colour, or different casing) silently failed to show in
+  // the dropdown even though the underlying form field was correct.
+  useEffect(() => { setCustom(isCustom); }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const handleSelect = (v) => { if (v === '__custom__') { setCustom(true); onChange(''); } else { setCustom(false); onChange(v); } };
   return (
     <div className="flex flex-col gap-1">
@@ -325,13 +311,20 @@ const SaleInvoice = () => {
     const tc = parseFloat(form.totalCarton) || 0;
     const pc = parseFloat(form.perCtnQty)   || 0;
     const r  = parseFloat(form.rate)        || 0;
-    const { totalQty, total } = computeSaleTotals(tc, pc, r);
+    const totalQty = tc * pc;
+    // rateMode 'piece' (default): rate is per individual piece — total =
+    // rate × totalQty, same as always. rateMode 'carton': rate is for one
+    // whole carton — total = rate × totalCarton instead, and we derive the
+    // effective per-piece rate (rate ÷ perCtnQty) just for display, since
+    // the rest of the app (print, ledger) only cares about the total.
+    const effectiveRate = form.rateMode === 'carton' ? (pc ? r / pc : 0) : r;
+    const total = form.rateMode === 'carton' ? (r * tc) : (r * totalQty);
     const sizeLabel = [form.sizeMm ? `${form.sizeMm}mm` : '', form.sizeInch ? `${form.sizeInch}` : '', form.yards ? `${form.yards}yds` : ''].filter(Boolean).join(' / ');
     if (editRowId) {
-      setRows(p => p.map(row => row.id === editRowId ? { ...form, id: editRowId, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total } : row));
+      setRows(p => p.map(row => row.id === editRowId ? { ...form, id: editRowId, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, effectiveRate, totalQty, total } : row));
       setEditRowId(null);
     } else {
-      setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, totalQty, total }]);
+      setRows(p => [...p, { id: Date.now(), ...form, sizeLabel, totalCarton: tc, perCtnQty: pc, rate: r, effectiveRate, totalQty, total }]);
     }
     setForm(emptyItem);
   };
@@ -342,6 +335,7 @@ const SaleInvoice = () => {
       yards: row.yards || '', colour: row.colour || '', brand: row.brand || '',
       micron: row.micron || '', totalCarton: String(row.totalCarton ?? ''),
       perCtnQty: String(row.perCtnQty ?? ''), rate: String(row.rate ?? ''),
+      rateMode: row.rateMode || 'piece',
     });
     setEditRowId(row.id);
   };
@@ -418,13 +412,6 @@ const SaleInvoice = () => {
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
   const totalCartonCount = rows.reduce((s, r) => s + (r.totalCarton || 0), 0);
 
-  // Live hint shown next to the Rate field — tells the user which way the
-  // number they just typed is currently being interpreted, since there's
-  // no separate toggle for it (see computeSaleTotals above).
-  const rateHint = form.rate
-    ? (Number(form.rate) > PER_CARTON_RATE_THRESHOLD ? 'Reading as: rate per carton' : 'Reading as: rate per roll')
-    : null;
-
   return (
     <div className="text-white min-h-screen pb-10">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -435,58 +422,48 @@ const SaleInvoice = () => {
             billType="Sale"
             context={{
               brands: (brands||[]).map(b=>b.name),
-              // Current bill items, numbered — lets the AI understand
-              // "edit entry 2" / "delete entry 3" instructions and reply
-              // with the full corrected list. See api/ai-bill.js.
-              existingItems: rows.map((r, i) => ({
-                number: i + 1,
-                sizeMm: r.sizeMm, sizeInch: r.sizeInch, yards: r.yards,
+              entries: rows.map((r, i) => ({
+                entryNumber: i + 1, sizeMm: r.sizeMm, sizeInch: r.sizeInch, yards: r.yards,
                 colour: r.colour, brand: r.brand, micron: r.micron,
-                totalCarton: r.totalCarton, perCtnQty: r.perCtnQty, rate: r.rate,
+                totalCarton: r.totalCarton, perCtnQty: r.perCtnQty, rate: r.rate, rateMode: r.rateMode || 'piece',
               })),
             }}
             onResult={(data) => {
-              // The API returns a small list of operations (add/edit/delete)
-              // describing only what changed — never a full re-statement of
-              // the bill — so existing rows the user didn't mention are
-              // guaranteed to survive untouched; only the app itself moves
-              // them from one state to the next.
-              const buildRow = (it, idHint) => {
-                const tc = parseFloat(it.totalCarton) || 0;
-                const pc = parseFloat(it.perCtnQty) || 0;
-                const rate = parseFloat(it.rate) || 0;
-                const { totalQty, total } = computeSaleTotals(tc, pc, rate);
-                const sizeLabel = [it.sizeMm ? `${it.sizeMm}mm` : '', it.sizeInch ? `${it.sizeInch}` : '', it.yards ? `${it.yards}yds` : ''].filter(Boolean).join(' / ');
+              const buildRow = (it, base = {}) => {
+                const merged = { ...base, ...it };
+                const tc = parseFloat(merged.totalCarton) || 0;
+                const pc = parseFloat(merged.perCtnQty) || 0;
+                const rate = parseFloat(merged.rate) || 0;
+                const rateMode = merged.rateMode === 'carton' ? 'carton' : 'piece';
+                const totalQty = tc * pc;
+                const effectiveRate = rateMode === 'carton' ? (pc ? rate / pc : 0) : rate;
+                const total = rateMode === 'carton' ? (rate * tc) : (rate * totalQty);
+                const sizeLabel = [merged.sizeMm ? `${merged.sizeMm}mm` : '', merged.sizeInch ? `${merged.sizeInch}` : '', merged.yards ? `${merged.yards}yds` : ''].filter(Boolean).join(' / ');
                 return {
-                  id: idHint ?? Date.now() + Math.random(),
-                  sizeUnit: 'mm', sizeMm: it.sizeMm||'', sizeInch: it.sizeInch||'', yards: it.yards||'',
-                  colour: it.colour||'', brand: it.brand||'', micron: it.micron||'',
-                  totalCarton: tc, perCtnQty: pc, rate, totalQty, total, sizeLabel,
+                  ...base,
+                  sizeUnit: 'mm', sizeMm: merged.sizeMm||'', sizeInch: merged.sizeInch||'', yards: merged.yards||'',
+                  colour: merged.colour||'', brand: merged.brand||'', micron: merged.micron||'',
+                  totalCarton: tc, perCtnQty: pc, rate, rateMode, effectiveRate, totalQty, total, sizeLabel,
                 };
               };
 
-              setRows(prevRows => {
-                let next = [...prevRows];
-                for (const op of (data.operations || [])) {
-                  if (op.type === 'add' && op.item) {
-                    next = [...next, buildRow(op.item)];
-                  } else if (op.type === 'edit' && op.targetNumber) {
-                    const idx = op.targetNumber - 1;
-                    if (idx >= 0 && idx < next.length) {
-                      // Merge: only the fields the AI actually returned
-                      // overwrite the existing row — anything it left out
-                      // (because the user didn't ask to change it) stays.
-                      const merged = { ...next[idx], ...op.item };
-                      next[idx] = buildRow(merged, next[idx].id);
-                    }
-                  } else if (op.type === 'delete' && op.targetNumber) {
-                    const idx = op.targetNumber - 1;
-                    if (idx >= 0 && idx < next.length) {
-                      next = next.filter((_, i) => i !== idx);
-                    }
-                  }
+              setRows(p => {
+                let next = [...p];
+                if (data.delete?.length) {
+                  const toDelete = new Set(data.delete);
+                  next = next.filter((_, i) => !toDelete.has(i + 1));
                 }
-                return next;
+                if (data.edit?.length) {
+                  data.edit.forEach(({ entryNumber, changes }) => {
+                    const idx = entryNumber - 1;
+                    if (idx >= 0 && idx < p.length) {
+                      const target = next.find(r => r.id === p[idx].id);
+                      if (target) next = next.map(r => r.id === target.id ? buildRow(changes, r) : r);
+                    }
+                  });
+                }
+                const added = (data.add || []).map((it, i) => ({ id: Date.now() + i, ...buildRow(it) }));
+                return [...next, ...added];
               });
               if (data.partyName && !buyerName) setBuyerName(String(data.partyName).toUpperCase());
               if (data.billNo && !billNo) setBillNo(data.billNo);
@@ -543,22 +520,25 @@ const SaleInvoice = () => {
           <button onClick={() => upd('sizeUnit', 'mm')} className={`px-6 py-2 text-xs font-bold transition ${form.sizeUnit === 'mm' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>Millimeter (mm)</button>
           <button onClick={() => upd('sizeUnit', 'inch')} className={`px-6 py-2 text-xs font-bold transition ${form.sizeUnit === 'inch' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>Inches (")</button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-1">
-          {form.sizeUnit === 'mm'
-            ? <SelectOrCustom key={`sizeMm-${editRowId ?? 'new'}`} value={form.sizeMm} onChange={v => upd('sizeMm', v)} options={SIZE_MM} placeholder="Select mm"/>
-            : <SelectOrCustom key={`sizeInch-${editRowId ?? 'new'}`} value={form.sizeInch} onChange={v => upd('sizeInch', v)} options={SIZE_INCH} placeholder="Select inch"/>}
-          <SelectOrCustom key={`yards-${editRowId ?? 'new'}`} value={form.yards} onChange={v => upd('yards', v)} options={YARDS_LIST} placeholder="Yards"/>
-          <SelectOrCustom key={`colour-${editRowId ?? 'new'}`} value={form.colour} onChange={v => upd('colour', v)} options={COLOURS} placeholder="Colour"/>
-          <SelectOrCustom key={`brand-${editRowId ?? 'new'}`} value={form.brand} onChange={v => upd('brand', v)} options={BRANDS} placeholder="Brand"/>
-          <SelectOrCustom key={`micron-${editRowId ?? 'new'}`} value={form.micron} onChange={v => upd('micron', v)} options={MICRONS} placeholder="Micron"/>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          {form.sizeUnit === 'mm' ? <SelectOrCustom resetKey={editRowId||'new'} value={form.sizeMm} onChange={v => upd('sizeMm', v)} options={SIZE_MM} placeholder="Select mm"/> : <SelectOrCustom resetKey={editRowId||'new'} value={form.sizeInch} onChange={v => upd('sizeInch', v)} options={SIZE_INCH} placeholder="Select inch"/>}
+          <SelectOrCustom resetKey={editRowId||'new'} value={form.yards} onChange={v => upd('yards', v)} options={YARDS_LIST} placeholder="Yards"/>
+          <SelectOrCustom resetKey={editRowId||'new'} value={form.colour} onChange={v => upd('colour', v)} options={COLOURS} placeholder="Colour"/>
+          <SelectOrCustom resetKey={editRowId||'new'} value={form.brand} onChange={v => upd('brand', v)} options={BRANDS} placeholder="Brand"/>
+          <SelectOrCustom resetKey={editRowId||'new'} value={form.micron} onChange={v => upd('micron', v)} options={MICRONS} placeholder="Micron"/>
           <input type="number" placeholder="Total CTN" value={form.totalCarton} onChange={e => upd('totalCarton', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
           <input type="number" placeholder="Rolls P.CTN" value={form.perCtnQty} onChange={e => upd('perCtnQty', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
           <div className="flex flex-col gap-1">
-            <input type="number" placeholder="Rate" value={form.rate} onChange={e => upd('rate', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
-            {rateHint && <span className="text-[9px] text-gray-500 ml-1">{rateHint}</span>}
+            <div className="flex bg-black/30 rounded-xl border border-[#22c55e]/20 overflow-hidden text-[10px] font-bold uppercase">
+              <button type="button" onClick={() => upd('rateMode', 'piece')} className={`flex-1 py-1.5 transition ${form.rateMode !== 'carton' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>Per Piece</button>
+              <button type="button" onClick={() => upd('rateMode', 'carton')} className={`flex-1 py-1.5 transition ${form.rateMode === 'carton' ? 'bg-[#22c55e] text-black' : 'text-gray-400'}`}>Per Carton</button>
+            </div>
+            <input type="number" placeholder={form.rateMode === 'carton' ? 'Rate per Carton' : 'Rate per Piece'} value={form.rate} onChange={e => upd('rate', e.target.value)} className="bg-black/30 p-3 rounded-xl border border-[#22c55e]/20 text-sm outline-none"/>
+            {form.rateMode === 'carton' && form.rate && form.perCtnQty && (
+              <p className="text-[10px] text-gray-500 px-1">≈ {(parseFloat(form.rate)/parseFloat(form.perCtnQty)).toFixed(2)} per piece</p>
+            )}
           </div>
         </div>
-        <div className="h-3"/>
         <button onClick={addItem} className="bg-[#22c55e] text-black font-black px-8 py-3 rounded-2xl flex items-center gap-2 hover:bg-emerald-400 transition text-xs uppercase tracking-widest"><Plus size={16}/> {editRowId ? 'Update Item' : 'Add to List'}</button>
         {editRowId && (
           <button onClick={cancelEditRow} className="px-4 py-3 rounded-2xl border border-white/10 text-gray-400 hover:text-red-400 transition text-xs font-bold uppercase">Cancel</button>
@@ -622,10 +602,8 @@ const SaleInvoice = () => {
         <table className="w-full text-left">
           <thead className="bg-white/5 text-[10px] uppercase font-black text-slate-500"><tr><th className="p-5">#</th><th>Description</th><th className="text-center">CTN</th><th className="text-center">Total Qty</th><th className="text-right">Rate</th><th className="text-right p-5">Amount</th><th className="p-5"></th></tr></thead>
           <tbody className="divide-y divide-white/5">
-            {rows.length === 0 ? (
-              <tr><td colSpan={7} className="p-16 text-center text-gray-600 font-bold uppercase tracking-widest italic">No items added yet.</td></tr>
-            ) : rows.map((r, i) => (
-              <tr key={r.id} className={`hover:bg-white/5 transition ${editRowId === r.id ? 'bg-yellow-500/10' : ''}`}><td className="p-5 text-gray-500">{i+1}</td><td><p className="font-bold">{r.brand} - {r.colour}</p><p className="text-[10px] text-gray-500 uppercase">{r.sizeLabel}</p></td><td className="text-center font-bold">{r.totalCarton}</td><td className="text-center text-emerald-500 font-bold">{r.totalQty}</td><td className="text-right font-mono text-xs">{(r.rate || 0).toLocaleString()}</td><td className="text-right font-black text-white p-5">{(r.total || 0).toLocaleString()}</td><td className="p-5"><div className="flex items-center justify-end gap-1"><button onClick={() => startEditRow(r)} className="p-1.5 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition"><Pencil size={14}/></button><button onClick={() => removeRow(r.id)} className="p-1.5 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"><Trash2 size={16}/></button></div></td></tr>
+            {rows.map((r, i) => (
+              <tr key={r.id} className={`hover:bg-white/5 transition ${editRowId === r.id ? 'bg-yellow-500/10' : ''}`}><td className="p-5 text-gray-500">{i+1}</td><td><p className="font-bold">{r.brand} - {r.colour}</p><p className="text-[10px] text-gray-500 uppercase">{r.sizeLabel}</p></td><td className="text-center font-bold">{r.totalCarton}</td><td className="text-center text-emerald-500 font-bold">{r.totalQty}</td><td className="text-right font-mono text-xs">{(r.rate || 0).toLocaleString()}{r.rateMode === 'carton' ? <span className="block text-[9px] text-gray-500">/carton ≈ {(r.effectiveRate||0).toFixed(2)}/pc</span> : <span className="block text-[9px] text-gray-500">/piece</span>}</td><td className="text-right font-black text-white p-5">{(r.total || 0).toLocaleString()}</td><td className="p-5"><div className="flex items-center justify-end gap-1"><button onClick={() => startEditRow(r)} className="p-1.5 text-gray-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition"><Pencil size={14}/></button><button onClick={() => removeRow(r.id)} className="p-1.5 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"><Trash2 size={16}/></button></div></td></tr>
             ))}
           </tbody>
         </table>
