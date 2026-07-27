@@ -33,12 +33,25 @@ const getMonth = (d) => {
   return `${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
 };
 
+// Sale ledgers: balance = opening + debit − credit (debit increases what's
+// owed to us, credit reduces it — the usual convention).
+// Purchase ledgers: reversed, per this shop's bookkeeping — debit
+// DECREASES the balance, credit INCREASES it (a Purchase bill is posted as
+// debit, a payment to the supplier as credit; see SaleInvoice/PurchaseInvoice
+// and the convention note in AccountsContext.jsx).
+const balanceForType = (openingBal, totalDebit, totalCredit, partyType) =>
+  partyType === 'Purchase'
+    ? openingBal - totalDebit + totalCredit
+    : openingBal + totalDebit - totalCredit;
+
 // ── PDF Export (Browser Print based) ───────────────────────
-const generatePDF = (partyName, entries, openingBal, monthFilter) => {
+const generatePDF = (partyName, entries, openingBal, monthFilter, partyType) => {
+  const isPurchase = partyType === 'Purchase';
   let bal = openingBal;
   const rowsHtml = entries.map(e => {
-    if (e.entry_type === 'debit')  bal += Number(e.amount) || 0;
-    if (e.entry_type === 'credit') bal -= Number(e.amount) || 0;
+    const amt = Number(e.amount) || 0;
+    if (e.entry_type === 'debit')  bal += isPurchase ? -amt : amt;
+    if (e.entry_type === 'credit') bal += isPurchase ?  amt : -amt;
     return `
       <tr>
         <td>${e.date || ''}</td>
@@ -104,13 +117,15 @@ const generatePDF = (partyName, entries, openingBal, monthFilter) => {
 };
 
 // ── CSV Export ─────────────────────────────────────────────
-const exportCSV = (partyName, entries, openingBal) => {
+const exportCSV = (partyName, entries, openingBal, partyType) => {
+  const isPurchase = partyType === 'Purchase';
   let bal = openingBal;
   const header = 'Date,Ref #,Description,Type,Debit,Credit,Balance\n';
   const openRow = `Opening,,Opening Balance,opening,,,${openingBal}\n`;
   const rows = entries.map(e => {
-    if (e.entry_type === 'debit')  bal += Number(e.amount) || 0;
-    if (e.entry_type === 'credit') bal -= Number(e.amount) || 0;
+    const amt = Number(e.amount) || 0;
+    if (e.entry_type === 'debit')  bal += isPurchase ? -amt : amt;
+    if (e.entry_type === 'credit') bal += isPurchase ?  amt : -amt;
     return `${e.date||''},${e.ref_bill_no||''},"${(e.description||'').replace(/"/g,"''")}",${e.entry_type},${e.entry_type==='debit'?Number(e.amount):''},${e.entry_type==='credit'?Number(e.amount):''},${bal}`;
   }).join('\n');
   const blob = new Blob([header + openRow + rows], { type: 'text/csv' });
@@ -202,7 +217,7 @@ export default function Ledger() {
         const normalEntries = pE.filter(e => e.entry_type !== 'opening');
         const totalDebit    = normalEntries.filter(e => e.entry_type === 'debit' ).reduce((s,e) => s+(Number(e.amount)||0), 0);
         const totalCredit   = normalEntries.filter(e => e.entry_type === 'credit').reduce((s,e) => s+(Number(e.amount)||0), 0);
-        const balance       = openingBal + totalDebit - totalCredit;
+        const balance       = balanceForType(openingBal, totalDebit, totalCredit, p.type);
 
         return { ...p, entries: normalEntries, openingEntry, openingBal, totalDebit, totalCredit, balance };
       })
@@ -243,10 +258,12 @@ export default function Ledger() {
   // ── Running balance (with opening) ────────────────────
   const withBal = useMemo(() => {
     if (!activeData) return [];
+    const isPurchase = activeData.type === 'Purchase';
     let bal = activeData.openingBal; 
     return filteredEntries.map(e => {
-      if (e.entry_type === 'debit')  bal += Number(e.amount) || 0;
-      if (e.entry_type === 'credit') bal -= Number(e.amount) || 0;
+      const amt = Number(e.amount) || 0;
+      if (e.entry_type === 'debit')  bal += isPurchase ? -amt : amt;
+      if (e.entry_type === 'credit') bal += isPurchase ?  amt : -amt;
       return { ...e, runningBalance: bal };
     });
   }, [filteredEntries, activeData]);
@@ -264,6 +281,7 @@ export default function Ledger() {
   // ── Monthly summary ────────────────────────────────────
   const monthlySummary = useMemo(() => {
     if (!activeData) return [];
+    const isPurchase = activeData.type === 'Purchase';
     const g = {};
     activeData.entries.forEach(e => {
       const m = getMonth(e.date); if (m === 'Unknown') return;
@@ -271,7 +289,7 @@ export default function Ledger() {
       if (e.entry_type === 'debit')  g[m].debit  += Number(e.amount)||0;
       if (e.entry_type === 'credit') g[m].credit += Number(e.amount)||0;
     });
-    return Object.values(g).map(x => ({ ...x, net: x.debit - x.credit }))
+    return Object.values(g).map(x => ({ ...x, net: isPurchase ? x.credit - x.debit : x.debit - x.credit }))
       .sort((a,b) => { const [ma,ya]=a.month.split(' ');const[mb,yb]=b.month.split(' '); return new Date(`${ma} 1,${ya}`) - new Date(`${mb} 1,${yb}`); });
   }, [activeData]);
 
@@ -430,7 +448,7 @@ export default function Ledger() {
 
   const filtDebit  = filteredEntries.filter(e=>e.entry_type==='debit' ).reduce((s,e)=>s+(Number(e.amount)||0),0);
   const filtCredit = filteredEntries.filter(e=>e.entry_type==='credit').reduce((s,e)=>s+(Number(e.amount)||0),0);
-  const finalBal   = activeData ? activeData.openingBal + activeData.totalDebit - activeData.totalCredit : 0;
+  const finalBal   = activeData ? balanceForType(activeData.openingBal, activeData.totalDebit, activeData.totalCredit, activeData.type) : 0;
 
   if (loading) return (
     <div className="flex items-center justify-center h-64 text-[#22c55e] font-bold">
@@ -555,12 +573,12 @@ export default function Ledger() {
                     </button>
                     {filteredEntries.length > 0 && (
                       <>
-                        <button onClick={() => exportCSV(activeParty, filteredEntries, activeData?.openingBal || 0)}
+                        <button onClick={() => exportCSV(activeParty, filteredEntries, activeData?.openingBal || 0, activeData?.type)}
                           className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border border-white/10 text-gray-400 hover:text-[#22c55e] hover:border-[#22c55e]/30 transition">
                           <Download size={13}/> CSV
                         </button>
                         {/* New PDF Button */}
-                        <button onClick={() => generatePDF(activeParty, filteredEntries, activeData?.openingBal || 0, monthFilter)}
+                        <button onClick={() => generatePDF(activeParty, filteredEntries, activeData?.openingBal || 0, monthFilter, activeData?.type)}
                           className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 transition">
                           <Printer size={13}/> PDF
                         </button>
@@ -662,18 +680,25 @@ export default function Ledger() {
                             {isEd ? <input value={editData.date} onChange={e=>setEditData(d=>({...d,date:e.target.value}))} className="bg-black/30 p-1 rounded w-24 text-xs"/> : <span className="text-gray-400 text-xs">{entry.date}</span>}
                           </td>
                           <td className="p-3">
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${entry.entry_type==='debit'?'bg-red-500/10 text-red-400 border-red-500/20':'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/20'}`}>
-                              {entry.entry_type}
-                            </span>
+                            {isEd ? (
+                              <div className="flex rounded-lg overflow-hidden border border-white/10 w-fit">
+                                <button type="button" onClick={() => setEditData(d => ({ ...d, entry_type: 'debit' }))} className={`px-2.5 py-1 text-[10px] font-bold transition ${editData.entry_type === 'debit' ? 'bg-red-500 text-white' : 'bg-black/30 text-gray-400'}`}>Debit</button>
+                                <button type="button" onClick={() => setEditData(d => ({ ...d, entry_type: 'credit' }))} className={`px-2.5 py-1 text-[10px] font-bold transition ${editData.entry_type === 'credit' ? 'bg-[#22c55e] text-black' : 'bg-black/30 text-gray-400'}`}>Credit</button>
+                              </div>
+                            ) : (
+                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${entry.entry_type==='debit'?'bg-red-500/10 text-red-400 border-red-500/20':'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/20'}`}>
+                                {entry.entry_type}
+                              </span>
+                            )}
                           </td>
                           <td className="p-3">
                             {isEd ? <input value={editData.description} onChange={e=>setEditData(d=>({...d,description:e.target.value}))} className="bg-black/30 p-1 rounded w-full text-xs"/> : <span className="text-xs text-gray-300">{entry.description}</span>}
                           </td>
                           <td className="p-3 text-right">
-                            {entry.entry_type === 'debit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-red-400 font-bold">{(entry.amount || 0).toLocaleString()}</span>) : '-'}
+                            {(isEd ? editData.entry_type : entry.entry_type) === 'debit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-red-400 font-bold">{(entry.amount || 0).toLocaleString()}</span>) : '-'}
                           </td>
                           <td className="p-3 text-right">
-                            {entry.entry_type === 'credit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-emerald-400 font-bold">{(entry.amount || 0).toLocaleString()}</span>) : '-'}
+                            {(isEd ? editData.entry_type : entry.entry_type) === 'credit' ? (isEd ? <input type="number" value={editData.amount} onChange={e=>setEditData(d=>({...d,amount:e.target.value}))} className="bg-black/30 p-1 w-20 text-right text-xs"/> : <span className="text-emerald-400 font-bold">{(entry.amount || 0).toLocaleString()}</span>) : '-'}
                           </td>
                           <td className="p-3 text-right font-black text-orange-400">
                             {(entry.runningBalance || 0).toLocaleString()}
