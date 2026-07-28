@@ -214,7 +214,7 @@ const PurchaseInvoice = () => {
       await postLedger({
         party_name: supplierName.toUpperCase(),
         party_type: 'Purchase',
-        entry_type: 'debit', // Purchase = debit (this shop's convention)
+        entry_type: 'credit',
         description: `Purchase Bill #${billNo || savedBill.id}`,
         amount: grandTotal,
         date,
@@ -246,60 +246,53 @@ const PurchaseInvoice = () => {
             billType="Purchase"
             context={{
               brands: (brands||[]).map(b=>b.name), plyOptions, cartonSizeOptions,
-              // Current bill items, numbered — lets the AI understand
-              // "edit entry 2" / "delete entry 3" instructions and reply
-              // with the full corrected list. See api/ai-bill.js.
-              existingItems: rows.map((r, i) => ({
-                number: i + 1,
-                mainCategory: r.mainCategory, brand: r.brand, side: r.side, ply: r.ply,
-                cartonType: r.cartonType, size: r.size, jamboCategory: r.jamboCategory,
-                color: r.color, micron: r.micron, width: r.width,
-                weight: r.weight, qty: r.qty, rate: r.rate,
+              entries: rows.map((r, i) => ({
+                entryNumber: i + 1, mainCategory: r.mainCategory, brand: r.brand, side: r.side, ply: r.ply,
+                cartonType: r.cartonType, size: r.size, jamboCategory: r.jamboCategory, micron: r.micron,
+                width: r.width, color: r.color, weight: r.weight, qty: r.qty, rate: r.rate,
               })),
             }}
             onResult={(data) => {
-              // The API returns a small list of operations (add/edit/delete)
-              // describing only what changed — never a full re-statement of
-              // the bill — so existing rows the user didn't mention are
-              // guaranteed to survive untouched; only the app itself moves
-              // them from one state to the next.
-              const buildRow = (it, idHint) => {
-                const weight = parseFloat(it.weight) || 1;
-                const qty = parseFloat(it.qty) || 0;
-                const rate = parseFloat(it.rate) || 0;
+              const buildRow = (it, base = {}) => {
+                const merged = { ...base, ...it };
+                const weight = parseFloat(merged.weight) || 1;
+                const qty = parseFloat(merged.qty) || 0;
+                const rate = parseFloat(merged.rate) || 0;
                 const amount = weight * qty * rate;
                 let specsLabel = '';
-                if (it.mainCategory === 'Core') specsLabel = `${it.brand} • ${it.side} • ${it.ply} Ply`;
-                else if (it.mainCategory === 'Carton') specsLabel = `${it.brand} • ${it.cartonType} • ${it.size}"`;
-                else specsLabel = `${it.jamboCategory} • ${it.micron}mic • ${it.width}mm${it.color ? ` • ${it.color}` : ''}`;
+                if (merged.mainCategory === 'Core') specsLabel = `${merged.brand} • ${merged.side} • ${merged.ply} Ply`;
+                else if (merged.mainCategory === 'Carton') specsLabel = `${merged.brand} • ${merged.cartonType} • ${merged.size}"`;
+                else specsLabel = `${merged.jamboCategory} • ${merged.micron}mic • ${merged.width}mm${merged.color ? ` • ${merged.color}` : ''}`;
                 return {
-                  id: idHint ?? Date.now() + Math.random(),
-                  mainCategory: it.mainCategory, brand: it.brand||'', side: it.side||'', ply: it.ply||'',
-                  cartonType: it.cartonType||'', size: it.size||'', jamboCategory: it.jamboCategory||'',
-                  color: it.color||'', micron: it.micron||'', width: it.width||'',
+                  ...base,
+                  mainCategory: merged.mainCategory, brand: merged.brand||'', side: merged.side||'', ply: merged.ply||'',
+                  cartonType: merged.cartonType||'', size: merged.size||'', jamboCategory: merged.jamboCategory||'',
+                  color: merged.color||'', micron: merged.micron||'', width: merged.width||'',
                   weight, qty, rate, amount, specsLabel,
                 };
               };
 
-              setRows(prevRows => {
-                let next = [...prevRows];
-                for (const op of (data.operations || [])) {
-                  if (op.type === 'add' && op.item) {
-                    next = [...next, buildRow(op.item)];
-                  } else if (op.type === 'edit' && op.targetNumber) {
-                    const idx = op.targetNumber - 1;
-                    if (idx >= 0 && idx < next.length) {
-                      const merged = { ...next[idx], ...op.item };
-                      next[idx] = buildRow(merged, next[idx].id);
-                    }
-                  } else if (op.type === 'delete' && op.targetNumber) {
-                    const idx = op.targetNumber - 1;
-                    if (idx >= 0 && idx < next.length) {
-                      next = next.filter((_, i) => i !== idx);
-                    }
-                  }
+              setRows(p => {
+                let next = [...p];
+                // Delete first (by original entryNumber, 1-based) — do this
+                // before edits so entryNumbers still refer to the original
+                // list the AI saw, not a list already shortened by an
+                // earlier delete in the same response.
+                if (data.delete?.length) {
+                  const toDelete = new Set(data.delete);
+                  next = next.filter((_, i) => !toDelete.has(i + 1));
                 }
-                return next;
+                if (data.edit?.length) {
+                  data.edit.forEach(({ entryNumber, changes }) => {
+                    const idx = entryNumber - 1;
+                    if (idx >= 0 && idx < p.length) {
+                      const target = next.find(r => r.id === p[idx].id);
+                      if (target) next = next.map(r => r.id === target.id ? buildRow(changes, r) : r);
+                    }
+                  });
+                }
+                const added = (data.add || []).map((it, i) => ({ id: Date.now() + i, ...buildRow(it) }));
+                return [...next, ...added];
               });
               if (data.supplierName && !supplierName) setSupplierName(data.supplierName);
               if (data.chalanNo && !chalanNo) setChalanNo(data.chalanNo);
@@ -335,7 +328,7 @@ const PurchaseInvoice = () => {
           <input ref={fileRef} type="file" accept="image/*" onChange={(e)=>{const f=e.target.files[0]; if(f){const rd=new FileReader(); rd.onload=()=>setLogo(rd.result); rd.readAsDataURL(f);}}} className="hidden"/>
           <div className="flex-1">
             <p className="text-sm font-black text-white flex items-center gap-1.5"><Truck size={14} className="text-[#22c55e]"/> Supplier Details</p>
-            <p className="text-[10px] text-gray-500">The more complete the bill, the cleaner it prints.</p>
+            <p className="text-[10px] text-gray-500">The more complete you fill this in, the cleaner your printout will be.</p>
           </div>
 
           {/* Stock-update toggle — OFF when the goods were already added
@@ -344,13 +337,13 @@ const PurchaseInvoice = () => {
           <button
             onClick={() => setUpdateStock(v => !v)}
             className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition shrink-0 ${updateStock ? 'bg-[#22c55e]/10 border-[#22c55e]/40 text-[#22c55e]' : 'bg-yellow-500/10 border-yellow-500/40 text-yellow-300'}`}
-            title={updateStock ? 'Stock will be added when you save' : 'Stock will NOT change when you save (already added manually)'}
+            title={updateStock ? 'Saving will add this to stock' : 'Saving will NOT touch stock (already added manually)'}
           >
             <span className={`relative w-9 h-5 rounded-full transition ${updateStock ? 'bg-[#22c55e]' : 'bg-white/20'}`}>
               <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-black transition-transform ${updateStock ? 'translate-x-4' : 'translate-x-0'}`}></span>
             </span>
             <span className="text-xs font-bold text-left leading-tight">
-              {updateStock ? <>Stock Update<br/><span className="opacity-70 font-normal">ON — will be added</span></> : <>Stock Update<br/><span className="opacity-70 font-normal">OFF — bill only</span></>}
+              {updateStock ? <>Stock Update<br/><span className="opacity-70 font-normal">ON — stock will be added</span></> : <>Stock Update<br/><span className="opacity-70 font-normal">OFF — bill only</span></>}
             </span>
           </button>
         </div>
@@ -429,7 +422,7 @@ const PurchaseInvoice = () => {
             </thead>
             <tbody className="divide-y divide-white/5">
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="p-16 text-center text-gray-600 font-bold uppercase tracking-widest italic">No items added yet.</td></tr>
+                <tr><td colSpan={7} className="p-16 text-center text-gray-600 font-bold uppercase tracking-widest italic">Koi item add nahi hua.</td></tr>
               ) : rows.map(r=>(
                 <tr key={r.id} className="hover:bg-white/[0.02] transition">
                   <td className="p-4 font-bold text-[#22c55e] text-sm">{r.mainCategory}</td>
