@@ -49,7 +49,15 @@ export default function Cloth() {
   const handleIssue = (item) => {
     const qty = parseFloat(issueQty[item._id]);
     if (!qty || qty <= 0) return;
-    issueYards(item._id, qty);
+    // If issuing this much would leave less than 20 yards, the roll is
+    // basically used up — remove it entirely instead of leaving a tiny
+    // leftover balance sitting in the list.
+    const remaining = Math.max(0, (Number(item.yards) || 0) - qty);
+    if (remaining < 20) {
+      removeItem(item._id);
+    } else {
+      issueYards(item._id, qty);
+    }
     setIssueQty(p => ({ ...p, [item._id]: '' }));
   };
 
@@ -201,8 +209,8 @@ export default function Cloth() {
                     ) : (
                       <span className={`font-bold text-sm ${isNegative ? 'text-red-500' : isLow ? 'text-yellow-500' : 'text-[#22c55e]'}`}>
                         {item.yards}
-                        {isNegative && <span className="text-[10px] bg-red-500/20 px-1.5 py-0.5 rounded-full ml-1">SHORT</span>}
-                        {!isNegative && isLow && <span className="text-[10px] bg-yellow-500/20 px-1.5 py-0.5 rounded-full ml-1">LOW</span>}
+                        {isNegative && <span className="text-[10px] bg-red-500/20 px-1.5 py-0.5 rounded-full ml-1">ACCESS</span>}
+                        {!isNegative && isLow && <span className="text-[10px] bg-yellow-500/20 px-1.5 py-0.5 rounded-full ml-1">SHORT</span>}
                       </span>
                     )}
                   </td>
