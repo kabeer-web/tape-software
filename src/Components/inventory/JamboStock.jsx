@@ -24,8 +24,12 @@ export default function JamboStock() {
   if (loading) return <div className="flex items-center justify-center h-64 text-[#22c55e] font-bold">Loading...</div>;
 
   const allJambo = inventory.filter(i => JAMBO_TYPES.map(t=>t.cat).includes(i.category||i.type));
-  const totalRolls = allJambo.length;
-  const totalYards = allJambo.reduce((s,i)=>s+(Number(i.yards)||0),0);
+  // Short/minus rolls (< 20 yards) still count toward Low Stock below, but
+  // are excluded from Total Rolls / Total Yards — those totals should
+  // reflect usable stock, not near-empty/negative rolls.
+  const usableJambo = allJambo.filter(i => Number(i.yards) >= 20);
+  const totalRolls = usableJambo.length;
+  const totalYards = usableJambo.reduce((s,i)=>s+(Number(i.yards)||0),0);
   const lowItems   = allJambo.filter(i=>Number(i.yards)<LOW).length;
 
   return (
@@ -55,8 +59,9 @@ export default function JamboStock() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {JAMBO_TYPES.map(({ cat, label, path }) => {
           const items      = inventory.filter(i=>(i.category===cat||i.type===cat));
-          const rolls      = items.length;
-          const yards      = items.reduce((s,i)=>s+(Number(i.yards)||0),0);
+          const usableItems = items.filter(i => Number(i.yards) >= 20);
+          const rolls      = usableItems.length;
+          const yards      = usableItems.reduce((s,i)=>s+(Number(i.yards)||0),0);
           const low        = items.filter(i=>Number(i.yards)<LOW).length;
           const hasLow     = low > 0;
 
