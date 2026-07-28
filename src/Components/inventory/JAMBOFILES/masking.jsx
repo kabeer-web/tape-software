@@ -11,6 +11,7 @@ const WIDTHS = ['1010'];
 export default function Masking() {
   const { inventory, addRoll, removeItem, issueYards, editItem, loading } = useContext(StockContext);
   const [search, setSearch] = useState('');
+  const [micronSearch, setMicronSearch] = useState(''); // separate from Roll # search
   const [issueQty, setIssueQty] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -19,7 +20,8 @@ export default function Masking() {
 
   const filtered = inventory.filter(i =>
     (i.category === CAT || i.type === CAT) &&
-    rollMatches(i.rollNo || i.roll_no, search)
+    rollMatches(i.rollNo || i.roll_no, search) &&
+    (micronSearch === '' || String(i.micron ?? '').includes(micronSearch))
   );
 
   // Rolls that are short/minus (< 20 yards) still show in the table below,
@@ -147,9 +149,15 @@ export default function Masking() {
         </form>
         <div className="bg-white/[0.03] p-5 rounded-2xl border border-[#22c55e]/20">
           <p className="text-xs text-gray-500 uppercase font-bold mb-3">Search</p>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#22c55e]/60" size={16} />
-            <input placeholder="Roll # se search karo..." className="w-full pl-9 p-2.5 bg-black/30 rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e] text-sm text-white placeholder:text-gray-500" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#22c55e]/60" size={16} />
+              <input placeholder="Roll # se search karo..." className="w-full pl-9 p-2.5 bg-black/30 rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e] text-sm text-white placeholder:text-gray-500" value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#22c55e]/60" size={16} />
+              <input placeholder="Micron se search karo..." className="w-full pl-9 p-2.5 bg-black/30 rounded-xl border border-[#22c55e]/20 outline-none focus:border-[#22c55e] text-sm text-white placeholder:text-gray-500" value={micronSearch} onChange={e => setMicronSearch(e.target.value)} />
+            </div>
           </div>
         </div>
       </div>
