@@ -22,7 +22,12 @@ export default function SuperYellow() {
     rollMatches(i.rollNo || i.roll_no, search)
   );
 
-  const totalYards = filtered.reduce((s, i) => s + (Number(i.yards) || 0), 0);
+  // Rolls that are short/minus (< 20 yards) still show in the table below,
+  // but are excluded from the "Rolls" and "Total Yards" totals up top —
+  // those totals should reflect usable stock, not near-empty/negative rolls.
+  const usableRolls = filtered.filter(i => Number(i.yards) >= 20);
+  const totalYards = usableRolls.reduce((s, i) => s + (Number(i.yards) || 0), 0);
+  const usableCount = usableRolls.length;
   const lowCount = filtered.filter(i => Number(i.yards) < LOW).length;
 
   const handleAdd = async (e) => {
@@ -110,7 +115,7 @@ export default function SuperYellow() {
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
           <Package className="text-[#22c55e] shrink-0" size={22} />
-          <div><p className="text-xl font-black text-[#22c55e]">{filtered.length}</p><p className="text-[10px] text-gray-500 uppercase">Rolls</p></div>
+          <div><p className="text-xl font-black text-[#22c55e]">{usableCount}</p><p className="text-[10px] text-gray-500 uppercase">Rolls</p></div>
         </div>
         <div className="bg-white/[0.03] border border-[#22c55e]/20 rounded-2xl p-4 flex items-center gap-3">
           <Layers className="text-[#22c55e] shrink-0" size={22} />
