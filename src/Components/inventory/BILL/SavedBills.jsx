@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useMemo } from 'react';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext } from '../StockContext';
 import {
@@ -173,6 +173,13 @@ const SavedBills = () => {
   const [editData,    setEditData]    = useState(null);
   const [filterType,  setFilterType]  = useState('All');
   const [search,      setSearch]      = useState('');
+  // Date filter — bill.date is stored as DD/MM/YYYY (en-GB), so quick
+  // Today/Yesterday buttons and the custom-date input all compare against
+  // that same format.
+  const [dateFilter,  setDateFilter]  = useState('all'); // 'all' | 'today' | 'yesterday' | 'custom'
+  const [customDate,  setCustomDate]  = useState('');
+  const todayStr     = useMemo(() => new Date().toLocaleDateString('en-GB'), []);
+  const yesterdayStr = useMemo(() => new Date(Date.now() - 86400000).toLocaleDateString('en-GB'), []);
   const [addingItem,  setAddingItem]  = useState(false);
   const [newItemForm, setNewItemForm] = useState(emptyItem);
   const [busyId,       setBusyId]     = useState(null); // bill currently being saved/deleted (disables its buttons)
@@ -181,6 +188,11 @@ const SavedBills = () => {
   // ── Filter ────────────────────────────────────────────
   const filtered = bills.filter(b =>
     (filterType === 'All' || b.billType === filterType) &&
+    (dateFilter === 'all'
+      || (dateFilter === 'today' && b.date === todayStr)
+      || (dateFilter === 'yesterday' && b.date === yesterdayStr)
+      || (dateFilter === 'custom' && (customDate === '' || b.date === customDate))
+    ) &&
     (search === '' ||
       b.partyName?.toLowerCase().includes(search.toLowerCase()) ||
       String(b.billNo || '').includes(search))
@@ -792,7 +804,7 @@ const SavedBills = () => {
       )}
 
       {/* Search + Filter */}
-      <div className="flex flex-wrap gap-3 mb-5">
+      <div className="flex flex-wrap gap-3 mb-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={15}/>
           <input
@@ -814,6 +826,40 @@ const SavedBills = () => {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Date filter */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        {[
+          { key: 'all', label: 'All Dates' },
+          { key: 'today', label: 'Today' },
+          { key: 'yesterday', label: 'Yesterday' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => { setDateFilter(key); if (key !== 'custom') setCustomDate(''); }}
+            className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wide border transition ${
+              dateFilter === key
+                ? 'bg-[#22c55e] text-black border-[#22c55e]'
+                : 'bg-white/[0.03] text-gray-400 border-[#22c55e]/20 hover:border-[#22c55e]/50'
+            }`}>
+            {label}
+          </button>
+        ))}
+        <div className="relative">
+          <input
+            value={customDate}
+            onChange={e => { setCustomDate(e.target.value); setDateFilter('custom'); }}
+            onFocus={() => setDateFilter('custom')}
+            placeholder="DD/MM/YYYY"
+            className={`px-3 py-2 rounded-xl font-bold text-xs border outline-none w-32 transition ${
+              dateFilter === 'custom'
+                ? 'bg-[#22c55e]/10 border-[#22c55e] text-white'
+                : 'bg-white/[0.03] border-[#22c55e]/20 text-gray-400'
+            }`}
+          />
+        </div>
+        {dateFilter !== 'all' && (
+          <span className="text-[10px] text-gray-500">{filtered.length} bill{filtered.length===1?'':'s'} found</span>
+        )}
       </div>
 
       {/* Summary cards */}
