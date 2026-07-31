@@ -1,5 +1,3 @@
---- START OF FILE Paste July 31, 2026 - 3:01PM ---
-
 import { useState, useContext } from 'react';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext } from '../StockContext';
@@ -497,7 +495,7 @@ const SavedBills = () => {
                       <thead className="bg-black/20 text-gray-500 uppercase">
                         <tr>
                           <th className="p-2.5">#</th>
-                          <th className="p-2.5">Size / Yards</th>
+                          <th className="p-2.5">Size</th>
                           <th className="p-2.5">Colour</th>
                           <th className="p-2.5">Brand</th>
                           <th className="p-2.5">MIC</th>
@@ -523,21 +521,17 @@ const SavedBills = () => {
 
                               {isEditing ? (
                                 <>
-                                  {/* Size mm / Inch / Yards Edit */}
+                                  {/* Size mm */}
                                   <td className="p-1.5">
                                     <div className="flex gap-1">
                                       <input value={item.sizeMm||''}
                                         onChange={e=>updateEditItem(idx,'sizeMm',e.target.value)}
                                         placeholder="mm"
-                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-12 text-xs"/>
+                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
                                       <input value={item.sizeInch||''}
                                         onChange={e=>updateEditItem(idx,'sizeInch',e.target.value)}
-                                        placeholder="in"
-                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-10 text-xs"/>
-                                      <input value={item.yards||''}
-                                        onChange={e=>updateEditItem(idx,'yards',e.target.value)}
-                                        placeholder="yds"
-                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-12 text-xs"/>
+                                        placeholder="inch"
+                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
                                     </div>
                                   </td>
                                   {['colour','brand','micron'].map(k=>(
@@ -598,15 +592,11 @@ const SavedBills = () => {
                                   <input value={newItemForm.sizeMm||''}
                                     onChange={e=>setNewItemForm(p=>({...p,sizeMm:e.target.value}))}
                                     placeholder="mm"
-                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-12 text-xs"/>
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
                                   <input value={newItemForm.sizeInch||''}
                                     onChange={e=>setNewItemForm(p=>({...p,sizeInch:e.target.value}))}
-                                    placeholder="in"
-                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-10 text-xs"/>
-                                  <input value={newItemForm.yards||''}
-                                    onChange={e=>setNewItemForm(p=>({...p,yards:e.target.value}))}
-                                    placeholder="yds"
-                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-12 text-xs"/>
+                                    placeholder="inch"
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
                                 </div>
                               </td>
                               {['colour','brand','micron','totalCarton','perCtnQty'].map(k=>(
