@@ -27,7 +27,7 @@ export default function Lemon() {
   // Rolls that are short/minus (< 20 yards) still show in the table below,
   // but are excluded from the "Rolls" and "Total Yards" totals up top —
   // those totals should reflect usable stock, not near-empty/negative rolls.
-  const usableRolls = filtered.filter(i => Number(i.yards) >= 20);
+  const usableRolls = filtered.filter(i => Number(i.yards) >= LOW);
   const totalYards = usableRolls.reduce((s, i) => s + (Number(i.yards) || 0), 0);
   const usableCount = usableRolls.length;
   const lowCount = filtered.filter(i => Number(i.yards) < LOW).length;
