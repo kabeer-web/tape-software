@@ -1,14 +1,10 @@
-import { useState, useContext, useMemo } from 'react';
+import { useState, useContext } from 'react';
 import { useAccounts } from '../ACCOUNTS/AccountsContext';
 import { StockContext } from '../StockContext';
 import {
   FileText, Pencil, Trash2, Check, X,
-  Plus, Search, Printer, Users, ChevronDown
+  Plus, Search, Printer, Users, ChevronDown, Calendar, Hash
 } from 'lucide-react';
-
-// Options for editing a Purchase Jambo item's spec fields — same list
-// PurchaseInvoice.jsx uses when the item was first entered.
-const JAMBO_CATEGORIES = ['Clear','Tan','Cloth','Masking','Tissue','SuperYellow','SuperClear','Color','Foam','Lemon'];
 
 // ── Number to words ───────────────────────────────────────
 const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
@@ -31,6 +27,20 @@ const toWords = (n) => {
 
 const ADDR  = 'PLOT #356-5, SECTOR 5-B, SAEEDABAD BALDIA TOWN S.I.T.E KARACHI';
 const PHONE = 'Phone: 0313-2400511 & 0308-7058453';
+
+// Bills store their date as a dd/mm/yyyy text string (from
+// toLocaleDateString('en-GB') in SaleInvoice/PurchaseInvoice) — parse that
+// into a real Date so bills can be sorted newest-first.
+const parseBillDate = (d) => {
+  if (!d) return new Date(0);
+  const parts = String(d).split('/');
+  if (parts.length === 3) {
+    const [dd, mm, yyyy] = parts;
+    return new Date(`${yyyy}-${mm}-${dd}`);
+  }
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? new Date(0) : parsed;
+};
 
 // ── Print function (same format as SaleInvoice) ──────────
 const printBill = (bill) => {
@@ -167,36 +177,36 @@ const emptyItem = {
 
 const SavedBills = () => {
   const { bills, updateBill, deleteBill, updateEntry, deleteEntry, getLedgerEntryForBill } = useAccounts();
-  const { inventory, upsertStock, adjustStock, brands, plyOptions, cartonSizeOptions } = useContext(StockContext);
+  const { inventory, upsertStock, adjustStock } = useContext(StockContext);
 
   const [editId,      setEditId]      = useState(null);
   const [editData,    setEditData]    = useState(null);
   const [filterType,  setFilterType]  = useState('All');
   const [search,      setSearch]      = useState('');
-  // Date filter — bill.date is stored as DD/MM/YYYY (en-GB), so quick
-  // Today/Yesterday buttons and the custom-date input all compare against
-  // that same format.
-  const [dateFilter,  setDateFilter]  = useState('all'); // 'all' | 'today' | 'yesterday' | 'custom'
-  const [customDate,  setCustomDate]  = useState('');
-  const todayStr     = useMemo(() => new Date().toLocaleDateString('en-GB'), []);
-  const yesterdayStr = useMemo(() => new Date(Date.now() - 86400000).toLocaleDateString('en-GB'), []);
+  // Two separate, simple filters — kept independent from the party-name
+  // search above so each does exactly one thing. Each toggles its own
+  // small input via its button, instead of one combined search box.
+  const [showBillNoSearch, setShowBillNoSearch] = useState(false);
+  const [showDateSearch,   setShowDateSearch]   = useState(false);
+  const [billNoQuery,       setBillNoQuery]       = useState('');
+  const [dateQuery,         setDateQuery]         = useState('');
   const [addingItem,  setAddingItem]  = useState(false);
   const [newItemForm, setNewItemForm] = useState(emptyItem);
   const [busyId,       setBusyId]     = useState(null); // bill currently being saved/deleted (disables its buttons)
   const [actionErr,    setActionErr]  = useState('');
 
   // ── Filter ────────────────────────────────────────────
-  const filtered = bills.filter(b =>
-    (filterType === 'All' || b.billType === filterType) &&
-    (dateFilter === 'all'
-      || (dateFilter === 'today' && b.date === todayStr)
-      || (dateFilter === 'yesterday' && b.date === yesterdayStr)
-      || (dateFilter === 'custom' && (customDate === '' || b.date === customDate))
-    ) &&
-    (search === '' ||
-      b.partyName?.toLowerCase().includes(search.toLowerCase()) ||
-      String(b.billNo || '').includes(search))
-  );
+  const filtered = bills
+    .filter(b =>
+      (filterType === 'All' || b.billType === filterType) &&
+      (search === '' ||
+        b.partyName?.toLowerCase().includes(search.toLowerCase()) ||
+        String(b.billNo || '').includes(search)) &&
+      (billNoQuery === '' || String(b.billNo || '').toLowerCase().includes(billNoQuery.toLowerCase())) &&
+      (dateQuery === '' || String(b.date || '').includes(dateQuery))
+    )
+    // Date-wise order — most recent bill first.
+    .sort((a, b) => parseBillDate(b.date) - parseBillDate(a.date));
 
   // ── Group by party ─────────────────────────────────────
   // So Sale and Purchase bills for the same party sit together, clearly
@@ -262,30 +272,13 @@ const SavedBills = () => {
     const bill = bills.find(b => (b._id || b.id) === editId);
     if (!bill) { cancelEdit(); return; }
 
-    // updateEditItem only patches the one field you typed into (rate, qty,
-    // totalCarton, perCtnQty) — it never touches that row's own derived
-    // total. Without this recompute, saving an edit updated the bill's
-    // Grand Total correctly but left every individual row's displayed
-    // total/amount frozen at whatever it was when the item was first
-    // added, making the edit look like it didn't take effect.
-    const recomputedItems = (editData.items || []).map(i => {
+    const grandTotal = (editData.items || []).reduce((s, i) => {
       if (editData.billType === 'Sale') {
-        const totalQty = (parseFloat(i.totalCarton) || 0) * (parseFloat(i.perCtnQty) || 0);
-        const sizeLabel = [i.sizeMm ? `${i.sizeMm}mm` : '', i.sizeInch ? `${i.sizeInch}` : '', i.yards ? `${i.yards}yds` : ''].filter(Boolean).join(' / ');
-        return { ...i, totalQty, total: totalQty * (parseFloat(i.rate) || 0), sizeLabel };
+        return s + (parseFloat(i.totalCarton)||0) * (parseFloat(i.perCtnQty)||0) * (parseFloat(i.rate)||0);
       }
-      // Purchase — also recompute specsLabel, since brand/side/ply/
-      // cartonType/size/jambo fields are now editable here too.
-      let specsLabel = i.specsLabel;
-      if (i.mainCategory === 'Core') specsLabel = `${i.brand} • ${i.side} • ${i.ply} Ply`;
-      else if (i.mainCategory === 'Carton') specsLabel = `${i.brand} • ${i.cartonType} • ${i.size}"`;
-      else if (i.mainCategory === 'Jambo') specsLabel = `${i.jamboCategory} • ${i.micron}mic • ${i.width}mm${i.color ? ` • ${i.color}` : ''}${i.weight ? ` • ${i.weight}kg` : ''}`;
-      return { ...i, specsLabel, amount: (parseFloat(i.qty) || 0) * (parseFloat(i.rate) || 0) };
-    });
-
-    const grandTotal = recomputedItems.reduce((s, i) =>
-      s + (editData.billType === 'Sale' ? (i.total || 0) : (i.amount || 0)), 0);
-    const totalCartonCount = recomputedItems.reduce((s, i) => s + (parseFloat(i.totalCarton)||0), 0);
+      return s + (parseFloat(i.qty)||0) * (parseFloat(i.rate)||0);
+    }, 0);
+    const totalCartonCount = (editData.items || []).reduce((s, i) => s + (parseFloat(i.totalCarton)||0), 0);
 
     setBusyId(editId); setActionErr('');
     try {
@@ -300,27 +293,11 @@ const SavedBills = () => {
         const oldById = new Map((bill.items || []).map(i => [i.id, i]));
         const newById = new Map((editData.items || []).map(i => [i.id, i]));
 
-        // What defines "the same stock row" for Core/Carton — if any of
-        // these changed (not just qty), the old delta-only approach would
-        // silently move stock into the wrong brand/spec's bucket instead
-        // of the one it was actually taken from.
-        const specKey = (i) =>
-          i.mainCategory === 'Core'   ? `Core|${i.brand}|${i.side}|${i.ply}` :
-          i.mainCategory === 'Carton' ? `Carton|${i.brand}|${i.cartonType}|${i.size}` :
-          null; // Jambo isn't spec-matched here — it's tracked by inventoryId instead.
-
         for (const [id, newItem] of newById) {
           const oldItem = oldById.get(id);
           const oldQty = oldItem ? (Number(oldItem.qty) || 0) : 0;
           const newQty = Number(newItem.qty) || 0;
-          if (oldItem && newItem.mainCategory !== 'Jambo' && specKey(oldItem) !== specKey(newItem)) {
-            // Brand/spec changed — fully reverse from the old spec, fully
-            // apply to the new one, instead of delta-ing the wrong row.
-            await applyPurchaseItemDelta(oldItem, -oldQty);
-            await applyPurchaseItemDelta(newItem, newQty);
-          } else {
-            await applyPurchaseItemDelta(newItem, newQty - oldQty);
-          }
+          await applyPurchaseItemDelta(newItem, newQty - oldQty);
         }
         for (const [id, oldItem] of oldById) {
           if (!newById.has(id)) {
@@ -333,7 +310,7 @@ const SavedBills = () => {
       // touch inventory, correctly matching what SaleInvoice.jsx itself did.
 
       await syncLedgerAmount(bill, grandTotal);
-      await updateBill(editId, { ...editData, items: recomputedItems, grandTotal, totalCartonCount });
+      await updateBill(editId, { ...editData, grandTotal, totalCartonCount });
       cancelEdit();
     } catch (err) {
       setActionErr('❌ Save failed: ' + err.message);
@@ -544,7 +521,7 @@ const SavedBills = () => {
 
                               {isEditing ? (
                                 <>
-                                  {/* Size mm / inch / yards */}
+                                  {/* Size mm */}
                                   <td className="p-1.5">
                                     <div className="flex gap-1">
                                       <input value={item.sizeMm||''}
@@ -554,10 +531,6 @@ const SavedBills = () => {
                                       <input value={item.sizeInch||''}
                                         onChange={e=>updateEditItem(idx,'sizeInch',e.target.value)}
                                         placeholder="inch"
-                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
-                                      <input value={item.yards||''}
-                                        onChange={e=>updateEditItem(idx,'yards',e.target.value)}
-                                        placeholder="yards"
                                         className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
                                     </div>
                                   </td>
@@ -624,10 +597,6 @@ const SavedBills = () => {
                                     onChange={e=>setNewItemForm(p=>({...p,sizeInch:e.target.value}))}
                                     placeholder="inch"
                                     className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
-                                  <input value={newItemForm.yards||''}
-                                    onChange={e=>setNewItemForm(p=>({...p,yards:e.target.value}))}
-                                    placeholder="yards"
-                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
                                 </div>
                               </td>
                               {['colour','brand','micron','totalCarton','perCtnQty'].map(k=>(
@@ -668,7 +637,7 @@ const SavedBills = () => {
                     </table>
                   ) : (
                     /* Purchase bill items */
-                    <table className="w-full text-left text-xs min-w-[760px]">
+                    <table className="w-full text-left text-xs min-w-[500px]">
                       <thead className="bg-black/20 text-gray-500 uppercase">
                         <tr>
                           <th className="p-2.5">Category</th>
@@ -685,58 +654,7 @@ const SavedBills = () => {
                             {isEditing ? (
                               <>
                                 <td className="p-1.5 text-gray-400 text-xs">{item.mainCategory}</td>
-                                <td className="p-1.5">
-                                  <div className="flex flex-wrap gap-1">
-                                    {item.mainCategory === 'Core' && (
-                                      <>
-                                        <input list="pb-brand-list" value={item.brand||''}
-                                          onChange={e=>updateEditItem(idx,'brand',e.target.value)}
-                                          placeholder="Brand"
-                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-20 text-xs"/>
-                                        <select value={item.side||''} onChange={e=>updateEditItem(idx,'side',e.target.value)}
-                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
-                                          <option value="">Side</option><option value="Single">Single</option><option value="Double">Double</option>
-                                        </select>
-                                        <select value={item.ply||''} onChange={e=>updateEditItem(idx,'ply',e.target.value)}
-                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
-                                          <option value="">Ply</option>{plyOptions.map(p=><option key={p} value={p}>{p} Ply</option>)}
-                                        </select>
-                                      </>
-                                    )}
-                                    {item.mainCategory === 'Carton' && (
-                                      <>
-                                        <input list="pb-brand-list" value={item.brand||''}
-                                          onChange={e=>updateEditItem(idx,'brand',e.target.value)}
-                                          placeholder="Brand"
-                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-20 text-xs"/>
-                                        <select value={item.cartonType||''} onChange={e=>updateEditItem(idx,'cartonType',e.target.value)}
-                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
-                                          <option value="">Type</option><option value="Small">Small</option><option value="Large">Large</option>
-                                        </select>
-                                        <select value={item.size||''} onChange={e=>updateEditItem(idx,'size',e.target.value)}
-                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
-                                          <option value="">Size</option>{cartonSizeOptions.map(s=><option key={s} value={s}>{s}"</option>)}
-                                        </select>
-                                      </>
-                                    )}
-                                    {item.mainCategory === 'Jambo' && (
-                                      <>
-                                        <select value={item.jamboCategory||''} onChange={e=>updateEditItem(idx,'jamboCategory',e.target.value)}
-                                          className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none text-xs">
-                                          <option value="">Type</option>{JAMBO_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                        <input value={item.micron||''} onChange={e=>updateEditItem(idx,'micron',e.target.value)}
-                                          placeholder="Micron" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
-                                        <input value={item.width||''} onChange={e=>updateEditItem(idx,'width',e.target.value)}
-                                          placeholder="Width" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
-                                        <input value={item.color||''} onChange={e=>updateEditItem(idx,'color',e.target.value)}
-                                          placeholder="Color" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
-                                        <input type="number" value={item.weight||''} onChange={e=>updateEditItem(idx,'weight',e.target.value)}
-                                          placeholder="Weight(kg)" className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-16 text-xs"/>
-                                      </>
-                                    )}
-                                  </div>
-                                </td>
+                                <td className="p-1.5 font-mono text-gray-300 text-xs">{item.specsLabel}</td>
                                 <td className="p-1.5">
                                   <input type="number" value={item.qty||''}
                                     onChange={e=>updateEditItem(idx,'qty',e.target.value)}
@@ -784,10 +702,6 @@ const SavedBills = () => {
   return (
     <div className="text-white min-h-screen">
 
-      <datalist id="pb-brand-list">
-        {(brands||[]).map(b=><option key={b._id} value={b.name}/>)}
-      </datalist>
-
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <FileText className="text-[#22c55e]" size={24}/>
@@ -828,37 +742,41 @@ const SavedBills = () => {
         </div>
       </div>
 
-      {/* Date filter */}
-      <div className="flex flex-wrap items-center gap-2 mb-5">
-        {[
-          { key: 'all', label: 'All Dates' },
-          { key: 'today', label: 'Today' },
-          { key: 'yesterday', label: 'Yesterday' },
-        ].map(({ key, label }) => (
-          <button key={key} onClick={() => { setDateFilter(key); if (key !== 'custom') setCustomDate(''); }}
-            className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wide border transition ${
-              dateFilter === key
-                ? 'bg-[#22c55e] text-black border-[#22c55e]'
-                : 'bg-white/[0.03] text-gray-400 border-[#22c55e]/20 hover:border-[#22c55e]/50'
-            }`}>
-            {label}
-          </button>
-        ))}
-        <div className="relative">
+      {/* Two simple, separate filters — Bill No and Date. Each button just
+          shows/hides its own small input; nothing else changes. */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <button
+          onClick={() => { setShowBillNoSearch(v => !v); if (showBillNoSearch) setBillNoQuery(''); }}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs border transition ${
+            showBillNoSearch ? 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/40' : 'bg-white/[0.03] text-gray-400 border-white/10 hover:border-[#22c55e]/30'
+          }`}>
+          <Hash size={13}/> Search by Bill No
+        </button>
+        {showBillNoSearch && (
           <input
-            value={customDate}
-            onChange={e => { setCustomDate(e.target.value); setDateFilter('custom'); }}
-            onFocus={() => setDateFilter('custom')}
-            placeholder="DD/MM/YYYY"
-            className={`px-3 py-2 rounded-xl font-bold text-xs border outline-none w-32 transition ${
-              dateFilter === 'custom'
-                ? 'bg-[#22c55e]/10 border-[#22c55e] text-white'
-                : 'bg-white/[0.03] border-[#22c55e]/20 text-gray-400'
-            }`}
+            autoFocus
+            value={billNoQuery}
+            onChange={e => setBillNoQuery(e.target.value)}
+            placeholder="e.g. 1001"
+            className="p-2 px-3 bg-white/[0.03] rounded-xl border border-[#22c55e]/30 outline-none text-sm w-36"
           />
-        </div>
-        {dateFilter !== 'all' && (
-          <span className="text-[10px] text-gray-500">{filtered.length} bill{filtered.length===1?'':'s'} found</span>
+        )}
+
+        <button
+          onClick={() => { setShowDateSearch(v => !v); if (showDateSearch) setDateQuery(''); }}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs border transition ${
+            showDateSearch ? 'bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/40' : 'bg-white/[0.03] text-gray-400 border-white/10 hover:border-[#22c55e]/30'
+          }`}>
+          <Calendar size={13}/> Search by Date
+        </button>
+        {showDateSearch && (
+          <input
+            autoFocus
+            value={dateQuery}
+            onChange={e => setDateQuery(e.target.value)}
+            placeholder="e.g. 22/07/2026"
+            className="p-2 px-3 bg-white/[0.03] rounded-xl border border-[#22c55e]/30 outline-none text-sm w-40"
+          />
         )}
       </div>
 
