@@ -27,7 +27,7 @@ export default function JamboStock() {
   // Short/minus rolls (< 20 yards) still count toward Low Stock below, but
   // are excluded from Total Rolls / Total Yards — those totals should
   // reflect usable stock, not near-empty/negative rolls.
-  const usableJambo = allJambo.filter(i => Number(i.yards) >= 20);
+  const usableJambo = allJambo.filter(i => Number(i.yards) >= LOW);
   const totalRolls = usableJambo.length;
   const totalYards = usableJambo.reduce((s,i)=>s+(Number(i.yards)||0),0);
   const lowItems   = allJambo.filter(i=>Number(i.yards)<LOW).length;
@@ -59,7 +59,7 @@ export default function JamboStock() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {JAMBO_TYPES.map(({ cat, label, path }) => {
           const items      = inventory.filter(i=>(i.category===cat||i.type===cat));
-          const usableItems = items.filter(i => Number(i.yards) >= 20);
+          const usableItems = items.filter(i => Number(i.yards) >= LOW);
           const rolls      = usableItems.length;
           const yards      = usableItems.reduce((s,i)=>s+(Number(i.yards)||0),0);
           const low        = items.filter(i=>Number(i.yards)<LOW).length;
