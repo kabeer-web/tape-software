@@ -532,6 +532,10 @@ const SavedBills = () => {
                                         onChange={e=>updateEditItem(idx,'sizeInch',e.target.value)}
                                         placeholder="inch"
                                         className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
+                                      <input value={item.yards||''}
+                                        onChange={e=>updateEditItem(idx,'yards',e.target.value)}
+                                        placeholder="yards"
+                                        className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
                                     </div>
                                   </td>
                                   {['colour','brand','micron'].map(k=>(
@@ -596,6 +600,10 @@ const SavedBills = () => {
                                   <input value={newItemForm.sizeInch||''}
                                     onChange={e=>setNewItemForm(p=>({...p,sizeInch:e.target.value}))}
                                     placeholder="inch"
+                                    className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
+                                  <input value={newItemForm.yards||''}
+                                    onChange={e=>setNewItemForm(p=>({...p,yards:e.target.value}))}
+                                    placeholder="yards"
                                     className="bg-black/30 p-1.5 rounded border border-[#22c55e]/20 outline-none w-14 text-xs"/>
                                 </div>
                               </td>
